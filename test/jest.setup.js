@@ -1,0 +1,3 @@
+// webcrypto polyfill
+const { Crypto } = require("@peculiar/webcrypto");
+global.crypto = new Crypto();
