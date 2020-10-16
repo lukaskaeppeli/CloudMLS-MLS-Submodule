@@ -21,53 +21,64 @@ import {DH, DHPublicKey, DHPrivateKey} from "./base"
 
 const subtle = window.crypto.subtle;
 
-export const p256: DH = {
-    async generateKeyPair(): Promise<[DHPrivateKey, DHPublicKey]> {
-        const keyPair: CryptoKeyPair = await subtle.generateKey(
-            {name: "ECDH", namedCurve: "P-256"}, true, ["deriveBits"],
-        );
-        return [new PrivateKey(keyPair), new PublicKey(keyPair.publicKey)];
-    },
+// 4.1.  DH-Based KEM
 
-    async deriveKeyPair(ikm: Uint8Array): Promise<[DHPrivateKey, DHPublicKey]> {
-        // FIXME: this is wrong
-        const keyPair: CryptoKeyPair = await subtle.generateKey(
-            {name: "ECDH", namedCurve: "P-256"}, true, ["deriveBits"],
-        );
-        return [new PrivateKey(keyPair), new PublicKey(keyPair.publicKey)];
-    },
-
-    async deserialize(enc: Uint8Array): Promise<DHPublicKey> {
-        const pubKey: CryptoKey = await subtle.importKey(
-            "raw", enc,
-            {name: "ECDH", namedCurve: "P-256"}, true, ["deriveBits"],
-        );
-        return new PublicKey(pubKey);
-    },
-
-    publicKeyLength: 65,
-    secretLength: 32,
-    privateKeyLength: 32,
-}
-
-export class PublicKey extends DHPublicKey {
-    constructor(private readonly key: CryptoKey) { super(); }
-    async dh(privKey: DHPrivateKey): Promise<Uint8Array> {
-        if (privKey instanceof PrivateKey) {
-            return new Uint8Array(await subtle.deriveBits(
-                {name: "ECDH", public: this.key}, privKey.keyPair.privateKey, 256,
-            ));
-        } else {
-            throw new Error("Incompatible private key");
+function makeDH(
+    name: string,
+    publicKeyLength: number,
+    privateKeyLength: number,
+    secretLength: number,
+): DH {
+    class PublicKey extends DHPublicKey {
+        constructor(private readonly key: CryptoKey) { super(); }
+        async dh(privKey: DHPrivateKey): Promise<Uint8Array> {
+            if (privKey instanceof PrivateKey) {
+                return new Uint8Array(await subtle.deriveBits(
+                    {name: "ECDH", public: this.key}, privKey.keyPair.privateKey, secretLength,
+                ));
+            } else {
+                throw new Error("Incompatible private key");
+            }
+        }
+        async serialize(): Promise<Uint8Array> {
+            return new Uint8Array(await subtle.exportKey("raw", this.key));
         }
     }
-    async serialize(): Promise<Uint8Array> {
-        return new Uint8Array(await subtle.exportKey("raw", this.key));
+
+    class PrivateKey extends DHPrivateKey {
+        constructor(readonly keyPair: CryptoKeyPair) { super(); }
     }
+
+    return {
+        async generateKeyPair(): Promise<[DHPrivateKey, DHPublicKey]> {
+            const keyPair: CryptoKeyPair = await subtle.generateKey(
+                {name: "ECDH", namedCurve: name}, true, ["deriveBits"],
+            );
+            return [new PrivateKey(keyPair), new PublicKey(keyPair.publicKey)];
+        },
+
+        async deriveKeyPair(ikm: Uint8Array): Promise<[DHPrivateKey, DHPublicKey]> {
+            // FIXME: this is wrong
+            const keyPair: CryptoKeyPair = await subtle.generateKey(
+                {name: "ECDH", namedCurve: name}, true, ["deriveBits"],
+            );
+            return [new PrivateKey(keyPair), new PublicKey(keyPair.publicKey)];
+        },
+
+        async deserialize(enc: Uint8Array): Promise<DHPublicKey> {
+            const pubKey: CryptoKey = await subtle.importKey(
+                "raw", enc,
+                {name: "ECDH", namedCurve: name}, true, ["deriveBits"],
+            );
+            return new PublicKey(pubKey);
+        },
+
+        publicKeyLength: publicKeyLength,
+        privateKeyLength: privateKeyLength,
+        secretLength: secretLength,
+    };
 }
 
-export class PrivateKey extends DHPrivateKey {
-    constructor(readonly keyPair: CryptoKeyPair) { super(); }
-}
-
-// FIXME: do the other NIST curves
+export const p256: DH = makeDH("P-256", 65, 32, 32);
+export const p384: DH = makeDH("P-384", 97, 48, 48);
+export const p521: DH = makeDH("P-521", 133, 66, 64);

@@ -18,18 +18,22 @@ limitations under the License.
  * https://tools.ietf.org/html/draft-irtf-cfrg-hpke-05
  */
 
-import {p256} from "./hpke/ecdh-nist";
-import {hkdfSha256} from "./hpke/hkdf";
-import {p256HkdfSha256} from "./hpke/dhkem";
+import {p256, p384, p521} from "./hpke/ecdh-nist";
+import {hkdfSha256, hkdfSha384, hkdfSha512} from "./hpke/hkdf";
+import {p256HkdfSha256, p384HkdfSha384, p521HkdfSha512} from "./hpke/dhkem";
 import {aes128Gcm, aes256Gcm} from "./hpke/aes";
 import {HPKE} from "./hpke/base";
 
 export const kem = {
     p256HkdfSha256,
+    p384HkdfSha384,
+    p521HkdfSha512,
 };
 
 export const kdf = {
     hkdfSha256,
+    hkdfSha384,
+    hkdfSha512,
 };
 
 export const aead = {
@@ -39,6 +43,8 @@ export const aead = {
 
 export const dh = {
     p256,
+    p384,
+    p521,
 };
 
 export const p256HkdfSha256Aes128Gcm = new HPKE(p256HkdfSha256, hkdfSha256, aes128Gcm);
