@@ -18,7 +18,7 @@ limitations under the License.
  * https://tools.ietf.org/html/draft-irtf-cfrg-hpke-05
  */
 
-import {concatUint8Array, EMPTY_BYTE_ARRAY} from "../util";
+import {concatUint8Array, EMPTY_BYTE_ARRAY, stringToUint8Array} from "../util";
 
 // 4.  Cryptographic Dependencies
 
@@ -107,7 +107,7 @@ export interface KDF {
     id: number;
 }
 
-const HPKE_IDENTIFIER = Uint8Array.from([72, 80, 75, 69, 45, 48, 53, 32] /*"HPKE-05 "*/)
+const HPKE_IDENTIFIER = stringToUint8Array("HPKE-05 ");
 
 // def LabeledExtract(salt, label, ikm)
 async function labeledExtract(
@@ -204,14 +204,13 @@ export abstract class DHPublicKey {
     abstract serialize(): Promise<Uint8Array>;
 }
 
-const EAE_PRK = Uint8Array.from([101, 97, 101, 95, 112, 114, 107]); // "eae_prk"
-const SHARED_SECRET = Uint8Array.from([
-    // "shared_secret"
-    115, 104, 97, 114, 101, 100, 95, 115, 101, 99, 114, 101, 116,
-]);
+const EAE_PRK = stringToUint8Array("eae_prk");
+const SHARED_SECRET = stringToUint8Array("shared_secret");
 
 export function makeDHKEM(dhGroup: DH, kdf: KDF, kemId: number): KEM {
-    const suiteId = Uint8Array.from([75, 69, 77/* "KEM" */, kemId >> 8 & 0xff, kemId & 0xff]);
+    const suiteId = stringToUint8Array("KEMxx");
+    suiteId[3] = kemId >> 8 & 0xff;
+    suiteId[4] = kemId & 0xff;
 
     async function extractAndExpand(dhSecret: Uint8Array, kemContext: Uint8Array): Promise<Uint8Array> {
         const eaePrk = await labeledExtract(
@@ -321,13 +320,13 @@ enum Mode {
 
 const PSK_MODES = [Mode.Psk, Mode.AuthPsk];
 
-const PSK_ID_HASH = Uint8Array.from([]); // FIXME: "psk_id_hash"
-const INFO_HASH = Uint8Array.from([]); // FIXME: "info_hash"
-const PSK_HASH = Uint8Array.from([]); // FIXME: "psk_hash"
-const SECRET = Uint8Array.from([115, 101, 99, 114, 101, 116]); // "secret"
-const KEY = Uint8Array.from([]); // FIXME: "key"
-const NONCE = Uint8Array.from([]); // FIXME: "nonce"
-const EXP = Uint8Array.from([]); // FIXME: "exp"
+const PSK_ID_HASH = stringToUint8Array("psk_id_hash");
+const INFO_HASH = stringToUint8Array("info_hash");
+const PSK_HASH = stringToUint8Array("psk_hash");
+const SECRET = stringToUint8Array("secret");
+const KEY = stringToUint8Array("key");
+const NONCE = stringToUint8Array("nonce");
+const EXP = stringToUint8Array("exp");
 
 export class HPKE {
     private readonly suiteId: Uint8Array;
@@ -336,11 +335,13 @@ export class HPKE {
         private readonly kdf: KDF,
         private readonly aead: AEAD,
     ) {
-        this.suiteId = Uint8Array.from([
-            0, 0, 0, 0, // FIXME: "HPKE"
-            kem.id >> 8 & 0xff, kem.id & 0xff,
-            kdf.id >> 8 & 0xff, kdf.id & 0xff,
-            aead.id >> 8 & 0xff, aead.id & 0xff,
+        this.suiteId = concatUint8Array([
+            stringToUint8Array("HPKE"),
+            Uint8Array.from([
+                kem.id >> 8 & 0xff, kem.id & 0xff,
+                kdf.id >> 8 & 0xff, kdf.id & 0xff,
+                aead.id >> 8 & 0xff, aead.id & 0xff,
+            ]),
         ]);
     }
 

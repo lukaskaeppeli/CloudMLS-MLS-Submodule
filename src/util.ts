@@ -26,3 +26,11 @@ export function concatUint8Array(arrays: Uint8Array[]): Uint8Array {
     }
     return ret;
 }
+
+export function stringToUint8Array(str: string): Uint8Array {
+    const ret = new Uint8Array(str.length);
+    for (let i = 0; i < str.length; i++) {
+        ret[i] = str.charCodeAt(i);
+    }
+    return ret;
+}
