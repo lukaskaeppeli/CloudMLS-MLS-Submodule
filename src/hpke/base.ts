@@ -20,6 +20,8 @@ limitations under the License.
 
 import {concatUint8Array, EMPTY_BYTE_ARRAY} from "../util";
 
+// 4.  Cryptographic Dependencies
+
 /** Key Encapsulation Mechanism
  */
 export interface KEM {
@@ -79,9 +81,7 @@ export abstract class KEMPrivateKey {
 
 // TODO: authEncap and authDecap
 
-// Extract(salt, ikm)
 type extractFunc = (salt: Uint8Array | undefined, ikm: Uint8Array) => Promise<Uint8Array>;
-// Expand(prk, info, L)
 type expandFunc = (prk: Uint8Array, info: Uint8Array | undefined, length: number) => Promise<Uint8Array>;
 
 /** Key Derivation Function
@@ -161,6 +161,8 @@ export interface AEAD {
     /** The identifier for this KEM */
     id: number;
 }
+
+// 4.1.  DH-Based KEM
 
 /** Diffie-Hellman group
  */
@@ -433,7 +435,7 @@ export class HPKE {
         return [enc, keySchedule];
     }
 
-    async SetupPSKR(
+    async setupPSKR(
         enc: Uint8Array,
         skR: KEMPrivateKey,
         info: Uint8Array,
