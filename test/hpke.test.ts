@@ -26,6 +26,15 @@ describe("HPKE", () => {
 
             expect(await privateKey.decapsulate(enc)).toEqual(key);
         });
+
+        it("encapsulates and decapsulates with authentication", async () => {
+            const [privateKey, publicKey] = await p256HkdfSha256.generateKeyPair();
+            const [skS, pkS] = await p256HkdfSha256.generateKeyPair();
+
+            const [key, enc] = await publicKey.authEncapsulate(skS);
+
+            expect(await privateKey.authDecapsulate(enc, pkS)).toEqual(key);
+        });
     });
 
     describe("P256-HKDF-SHA256/HKDF-SHA256/AES-128-GCM", () => {
