@@ -526,6 +526,108 @@ export class HPKE {
         const sharedSecret = await skR.authDecapsulate(enc, pkS);
         return await this.keySchedule(Mode.AuthPsk, sharedSecret, info, psk, pskId);
     }
+
+    // 6.  Single-Shot APIs
+
+    async sealBase(
+        pkR: KEMPublicKey,
+        info: Uint8Array,
+        aad: Uint8Array,
+        pt: Uint8Array,
+    ): Promise<[Uint8Array, Uint8Array]> {
+        const [enc, ctx] = await this.setupBaseS(pkR, info);
+        const ct = await ctx.seal(aad, pt);
+        return [enc, ct];
+    }
+
+    async openBase(
+        enc: Uint8Array,
+        skR: KEMPrivateKey,
+        info: Uint8Array,
+        aad: Uint8Array,
+        ct: Uint8Array,
+    ): Promise<Uint8Array> {
+        const ctx = await this.setupBaseR(enc, skR, info);
+        return ctx.open(aad, ct);
+    }
+
+    async sealPsk(
+        pkR: KEMPublicKey,
+        info: Uint8Array,
+        aad: Uint8Array,
+        pt: Uint8Array,
+        psk: Uint8Array,
+        pskId: Uint8Array,
+    ): Promise<[Uint8Array, Uint8Array]> {
+        const [enc, ctx] = await this.setupPskS(pkR, info, psk, pskId);
+        const ct = await ctx.seal(aad, pt);
+        return [enc, ct];
+    }
+
+    async openPsk(
+        enc: Uint8Array,
+        skR: KEMPrivateKey,
+        info: Uint8Array,
+        aad: Uint8Array,
+        ct: Uint8Array,
+        psk: Uint8Array,
+        pskId: Uint8Array,
+    ): Promise<Uint8Array> {
+        const ctx = await this.setupPskR(enc, skR, info, psk, pskId);
+        return ctx.open(aad, ct);
+    }
+
+    async sealAuth(
+        pkR: KEMPublicKey,
+        info: Uint8Array,
+        aad: Uint8Array,
+        pt: Uint8Array,
+        skS: KEMPrivateKey,
+    ): Promise<[Uint8Array, Uint8Array]> {
+        const [enc, ctx] = await this.setupAuthS(pkR, info, skS);
+        const ct = await ctx.seal(aad, pt);
+        return [enc, ct];
+    }
+
+    async openAuth(
+        enc: Uint8Array,
+        skR: KEMPrivateKey,
+        info: Uint8Array,
+        aad: Uint8Array,
+        ct: Uint8Array,
+        pkS: KEMPublicKey,
+    ): Promise<Uint8Array> {
+        const ctx = await this.setupAuthR(enc, skR, info, pkS);
+        return ctx.open(aad, ct);
+    }
+
+    async sealAuthPsk(
+        pkR: KEMPublicKey,
+        info: Uint8Array,
+        aad: Uint8Array,
+        pt: Uint8Array,
+        psk: Uint8Array,
+        pskId: Uint8Array,
+        skS: KEMPrivateKey,
+    ): Promise<[Uint8Array, Uint8Array]> {
+        const [enc, ctx] = await this.setupAuthPskS(pkR, info, psk, pskId, skS);
+        const ct = await ctx.seal(aad, pt);
+        return [enc, ct];
+    }
+
+    async openAuthPsk(
+        enc: Uint8Array,
+        skR: KEMPrivateKey,
+        info: Uint8Array,
+        aad: Uint8Array,
+        ct: Uint8Array,
+        psk: Uint8Array,
+        pskId: Uint8Array,
+        pkS: KEMPublicKey,
+    ): Promise<Uint8Array> {
+        const ctx = await this.setupAuthPskR(enc, skR, info, psk, pskId, pkS);
+        return ctx.open(aad, ct);
+    }
 }
 
 // 5.2.  Encryption and Decryption
