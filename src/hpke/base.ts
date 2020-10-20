@@ -424,7 +424,7 @@ export class HPKE {
             secret, EXP, keyScheduleContext, this.kdf.extractLength,
         );
 
-        return new Context(this.aead, key, nonce, exporterSecret);
+        return new Context(this.aead, this.kdf, this.suiteId, key, nonce, exporterSecret);
     }
 
     // 5.1.1 Encryption to a public key
@@ -529,10 +529,15 @@ export class HPKE {
 }
 
 // 5.2.  Encryption and Decryption
+
+const SEC = stringToUint8Array("sec");
+
 class Context {
     private sequence: Uint8Array;
     constructor(
         readonly aead: AEAD,
+        readonly kdf: KDF,
+        readonly suiteId: Uint8Array,
         private readonly key: Uint8Array,
         private readonly nonce: Uint8Array,
         private readonly exporterSecret: Uint8Array,
@@ -570,5 +575,17 @@ class Context {
         const pt = await this.aead.open(this.key, this.computeNonce(), aad, ct);
         this.incrementSeq();
         return pt;
+    }
+
+    // 5.3.  Secret Export
+
+    async export(exporterContext: Uint8Array, length: number): Promise<Uint8Array> {
+        if (length > 255 * this.kdf.extractLength) {
+            throw new Error("Export length too long");
+        }
+        return await labeledExpand(
+            this.kdf, this.suiteId,
+            this.exporterSecret, SEC, exporterContext, length,
+        );
     }
 }

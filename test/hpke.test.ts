@@ -119,5 +119,24 @@ describe("HPKE", () => {
             const ct = await baseS.seal(aad, pt);
             expect(await baseR.open(aad, ct)).toEqual(pt);
         });
+
+        it("exports secrets", async () => {
+            const [privateKey, publicKey] = await p256HkdfSha256.generateKeyPair();
+
+            const info = Uint8Array.from([1, 2, 3]);
+
+            const [enc, baseS] = await p256HkdfSha256Aes128Gcm.setupBaseS(
+                publicKey, info,
+            );
+
+            const baseR = await p256HkdfSha256Aes128Gcm.setupBaseR(
+                enc, privateKey, info,
+            );
+
+            const exporterContext = Uint8Array.from([4, 5, 6]);
+
+            const secret = await baseS.export(exporterContext, 10);
+            expect(await baseR.export(exporterContext, 10)).toEqual(secret);
+        });
     });
 });
