@@ -66,11 +66,11 @@ describe("HPKE", () => {
             const psk = Uint8Array.from([0, 1, 2]);
             const pskId = Uint8Array.from([3, 4, 5]);
 
-            const [enc, baseS] = await p256HkdfSha256Aes128Gcm.setupPSKS(
+            const [enc, baseS] = await p256HkdfSha256Aes128Gcm.setupPskS(
                 publicKey, info, psk, pskId,
             );
 
-            const baseR = await p256HkdfSha256Aes128Gcm.setupPSKR(
+            const baseR = await p256HkdfSha256Aes128Gcm.setupPskR(
                 enc, privateKey, info, psk, pskId,
             );
 
@@ -108,11 +108,11 @@ describe("HPKE", () => {
             const psk = Uint8Array.from([0, 1, 2]);
             const pskId = Uint8Array.from([3, 4, 5]);
 
-            const [enc, baseS] = await p256HkdfSha256Aes128Gcm.setupPSKS(
+            const [enc, baseS] = await p256HkdfSha256Aes128Gcm.setupAuthPskS(
                 publicKey, info, psk, pskId, skS,
             );
 
-            const baseR = await p256HkdfSha256Aes128Gcm.setupPSKR(
+            const baseR = await p256HkdfSha256Aes128Gcm.setupAuthPskR(
                 enc, privateKey, info, psk, pskId, pkS,
             );
 

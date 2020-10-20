@@ -369,7 +369,7 @@ export class HPKE {
         ]);
     }
 
-    private verifyPSKInputs(mode: Mode, psk: Uint8Array, pskId: Uint8Array): void {
+    private verifyPskInputs(mode: Mode, psk: Uint8Array, pskId: Uint8Array): void {
         const gotPsk = (psk.byteLength != 0);
         const gotPskId = (pskId.byteLength != 0);
         if (gotPsk != gotPskId) {
@@ -391,7 +391,7 @@ export class HPKE {
         psk: Uint8Array,
         pskId: Uint8Array,
     ): Promise<Context> {
-        this.verifyPSKInputs(mode, psk, pskId);
+        this.verifyPskInputs(mode, psk, pskId);
 
         const pskIdHash = await labeledExtract(
             this.kdf, this.suiteId, EMPTY_BYTE_ARRAY, PSK_ID_HASH, pskId,
@@ -450,7 +450,7 @@ export class HPKE {
 
     // 5.1.2 Authentication using a Pre-Shared Key
 
-    async setupPSKS(
+    async setupPskS(
         pkR: KEMPublicKey, info: Uint8Array, psk: Uint8Array, pskId: Uint8Array,
     ): Promise<[Uint8Array, Context]> {
         const [sharedSecret, enc] = await pkR.encapsulate();
@@ -460,7 +460,7 @@ export class HPKE {
         return [enc, keySchedule];
     }
 
-    async setupPSKR(
+    async setupPskR(
         enc: Uint8Array,
         skR: KEMPrivateKey,
         info: Uint8Array,
@@ -501,7 +501,7 @@ export class HPKE {
 
     // 5.1.4.  Authentication using both a PSK and an Asymmetric Key
 
-    async setupAuthPSKS(
+    async setupAuthPskS(
         pkR: KEMPublicKey,
         info: Uint8Array,
         psk: Uint8Array,
@@ -515,7 +515,7 @@ export class HPKE {
         ];
     }
 
-    async setupAuthPSKR(
+    async setupAuthPskR(
         enc: Uint8Array,
         skR: KEMPrivateKey,
         info: Uint8Array,
