@@ -470,6 +470,62 @@ export class HPKE {
         const sharedSecret = await skR.decapsulate(enc);
         return await this.keySchedule(Mode.Psk, sharedSecret, info, psk, pskId);
     }
+
+    // 5.1.3.  Authentication using an Asymmetric Key
+
+    async setupAuthS(
+        pkR: KEMPublicKey,
+        info: Uint8Array,
+        skS: KEMPrivateKey,
+    ): Promise<[Uint8Array, Context]> {
+        const [sharedSecret, enc] = await pkR.authEncapsulate(skS);
+        return [
+            enc,
+            await this.keySchedule(
+                Mode.Auth, sharedSecret, info, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY,
+            ),
+        ];
+    }
+
+    async setupAuthR(
+        enc: Uint8Array,
+        skR: KEMPrivateKey,
+        info: Uint8Array,
+        pkS: KEMPublicKey,
+    ): Promise<Context> {
+        const sharedSecret = await skR.authDecapsulate(enc, pkS);
+        return await this.keySchedule(
+            Mode.Auth, sharedSecret, info, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY,
+        )
+    }
+
+    // 5.1.4.  Authentication using both a PSK and an Asymmetric Key
+
+    async setupAuthPSKS(
+        pkR: KEMPublicKey,
+        info: Uint8Array,
+        psk: Uint8Array,
+        pskId: Uint8Array,
+        skS: KEMPrivateKey,
+    ): Promise<[Uint8Array, Context]> {
+        const [sharedSecret, enc] = await pkR.authEncapsulate(skS);
+        return [
+            enc,
+            await this.keySchedule(Mode.AuthPsk, sharedSecret, info, psk, pskId),
+        ];
+    }
+
+    async setupAuthPSKR(
+        enc: Uint8Array,
+        skR: KEMPrivateKey,
+        info: Uint8Array,
+        psk: Uint8Array,
+        pskId: Uint8Array,
+        pkS: KEMPublicKey,
+    ): Promise<Context> {
+        const sharedSecret = await skR.authDecapsulate(enc, pkS);
+        return await this.keySchedule(Mode.AuthPsk, sharedSecret, info, psk, pskId);
+    }
 }
 
 // 5.2.  Encryption and Decryption

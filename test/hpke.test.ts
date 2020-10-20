@@ -77,5 +77,47 @@ describe("HPKE", () => {
             const ct = await baseS.seal(aad, pt);
             expect(await baseR.open(aad, ct)).toEqual(pt);
         });
+
+        it("encrypts and decrypts with authentication", async () => {
+            const [privateKey, publicKey] = await p256HkdfSha256.generateKeyPair();
+
+            const info = Uint8Array.from([1, 2, 3]);
+            const [skS, pkS] = await p256HkdfSha256.generateKeyPair();
+            const aad = Uint8Array.from([4, 5, 6]);
+            const pt = Uint8Array.from([7, 8, 9]);
+
+            const [enc, baseS] = await p256HkdfSha256Aes128Gcm.setupAuthS(
+                publicKey, info, skS,
+            );
+
+            const baseR = await p256HkdfSha256Aes128Gcm.setupAuthR(
+                enc, privateKey, info, pkS,
+            );
+
+            const ct = await baseS.seal(aad, pt);
+            expect(await baseR.open(aad, ct)).toEqual(pt);
+        });
+
+        it("encrypts and decrypts with authentication and PSK", async () => {
+            const [privateKey, publicKey] = await p256HkdfSha256.generateKeyPair();
+
+            const info = Uint8Array.from([1, 2, 3]);
+            const [skS, pkS] = await p256HkdfSha256.generateKeyPair();
+            const aad = Uint8Array.from([4, 5, 6]);
+            const pt = Uint8Array.from([7, 8, 9]);
+            const psk = Uint8Array.from([0, 1, 2]);
+            const pskId = Uint8Array.from([3, 4, 5]);
+
+            const [enc, baseS] = await p256HkdfSha256Aes128Gcm.setupPSKS(
+                publicKey, info, psk, pskId, skS,
+            );
+
+            const baseR = await p256HkdfSha256Aes128Gcm.setupPSKR(
+                enc, privateKey, info, psk, pskId, pkS,
+            );
+
+            const ct = await baseS.seal(aad, pt);
+            expect(await baseR.open(aad, ct)).toEqual(pt);
+        });
     });
 });
