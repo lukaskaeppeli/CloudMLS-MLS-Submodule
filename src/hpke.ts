@@ -19,8 +19,14 @@ limitations under the License.
  */
 
 import {p256, p384, p521} from "./hpke/ecdh-nist";
+import {x25519} from "./hpke/ecdh-x";
 import {hkdfSha256, hkdfSha384, hkdfSha512} from "./hpke/hkdf";
-import {p256HkdfSha256, p384HkdfSha384, p521HkdfSha512} from "./hpke/dhkem";
+import {
+    p256HkdfSha256,
+    p384HkdfSha384,
+    p521HkdfSha512,
+    x25519HkdfSha256,
+} from "./hpke/dhkem";
 import {aes128Gcm, aes256Gcm} from "./hpke/aes";
 import {HPKE} from "./hpke/base";
 
@@ -28,6 +34,7 @@ export const kem = {
     p256HkdfSha256,
     p384HkdfSha384,
     p521HkdfSha512,
+    x25519HkdfSha256,
 };
 
 export const kdf = {
@@ -48,3 +55,4 @@ export const dh = {
 };
 
 export const p256HkdfSha256Aes128Gcm = new HPKE(p256HkdfSha256, hkdfSha256, aes128Gcm);
+export const x25519HkdfSha256Aes128Gcm = new HPKE(x25519HkdfSha256, hkdfSha256, aes128Gcm);
