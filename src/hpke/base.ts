@@ -120,7 +120,7 @@ export interface KDF {
 const HPKE_IDENTIFIER = stringToUint8Array("HPKE-05 ");
 
 // def LabeledExtract(salt, label, ikm)
-async function labeledExtract(
+export async function labeledExtract(
     kdf: KDF,
     suiteId: Uint8Array,
     salt: Uint8Array | undefined,
@@ -132,7 +132,7 @@ async function labeledExtract(
 }
 
 // def LabeledExpand(prk, label, info, L):
-async function labeledExpand(
+export async function labeledExpand(
     kdf: KDF,
     suiteId: Uint8Array,
     prk: Uint8Array,
@@ -180,9 +180,12 @@ export interface DH {
     /** Generate an ephemeral key pair "(skX, pkX)" for the DH group in use.
      */
     generateKeyPair(): Promise<[DHPrivateKey, DHPublicKey]>;
-    /** Generate an ephemeral key pair "(skX, pkX)" for the DH group in use.
+    /** Generate an ephemeral key pair "(skX, pkX)" for the DH group in use,
+     * based on a KDF.
      */
-    deriveKeyPair(ikm: Uint8Array): Promise<[DHPrivateKey, DHPublicKey]>;
+    deriveKeyPair(
+        kdf: KDF, suiteId: Uint8Array, ikm: Uint8Array,
+    ): Promise<[DHPrivateKey, DHPublicKey]>;
 
     /** Parse a byte string of length "Npk" to recover a public key (note: this
      * function can raise an error upon "enc" deserialization failure)
@@ -316,7 +319,7 @@ export function makeDHKEM(dhGroup: DH, kdf: KDF, kemId: number): KEM {
             return [new PrivateKey(privateKey, publicKey), new PublicKey(publicKey)];
         },
         async deriveKeyPair(ikm: Uint8Array): Promise<[KEMPrivateKey, KEMPublicKey]> {
-            const [privateKey, publicKey] = await dhGroup.deriveKeyPair(ikm);
+            const [privateKey, publicKey] = await dhGroup.deriveKeyPair(kdf, suiteId, ikm);
             return [new PrivateKey(privateKey, publicKey), new PublicKey(publicKey)];
         },
         async deserialize(enc: Uint8Array): Promise<KEMPublicKey> {

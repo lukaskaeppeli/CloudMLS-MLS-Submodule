@@ -17,60 +17,103 @@ limitations under the License.
 /** ECDH operations using the NIST curves
  */
 
-import {DH, DHPublicKey, DHPrivateKey} from "./base"
+import {KDF, DH, DHPublicKey, DHPrivateKey, labeledExtract, labeledExpand} from "./base"
+import {EMPTY_BYTE_ARRAY, stringToUint8Array} from "../util";
+import {ec as EC} from "elliptic";
 
-const subtle = window.crypto.subtle;
+function eqUint8Array(a: Uint8Array, b: Uint8Array) {
+    if (a.length != b.length) {
+        return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] != b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// is the first array greater or equal to the second array
+function geUint8Array(a: Uint8Array, b: Uint8Array) {
+    if (a.length != b.length) {
+        throw new Error("Length must be the same");
+    }
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] > b[i]) {
+            return true;
+        } else if (a[i] < b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
 
 // 4.1.  DH-Based KEM
+
+const CANDIDATE = stringToUint8Array("candidate");
+const DKP_PRK = stringToUint8Array("dkp_prk");
 
 function makeDH(
     name: string,
     publicKeyLength: number,
     privateKeyLength: number,
     secretLength: number,
+    bitmask: number,
 ): DH {
+    const ec = new EC(name);
+    const zeroKey = new Uint8Array(privateKeyLength);
+    const order = ec.n.toArrayLike(Uint8Array, "be", privateKeyLength);
+
     class PublicKey extends DHPublicKey {
-        constructor(private readonly key: CryptoKey) { super(); }
+        constructor(private readonly key) { super(); }
         async dh(privKey: DHPrivateKey): Promise<Uint8Array> {
             if (privKey instanceof PrivateKey) {
-                return new Uint8Array(await subtle.deriveBits(
-                    {name: "ECDH", public: this.key}, privKey.keyPair.privateKey, secretLength,
-                ));
+                return privKey.keyPair.derive(this.key).toArrayLike(Uint8Array, "be", 32);
             } else {
                 throw new Error("Incompatible private key");
             }
         }
         async serialize(): Promise<Uint8Array> {
-            return new Uint8Array(await subtle.exportKey("raw", this.key));
+            return Uint8Array.from(this.key.encode());
         }
     }
 
     class PrivateKey extends DHPrivateKey {
-        constructor(readonly keyPair: CryptoKeyPair) { super(); }
+        constructor(readonly keyPair) { super(); }
     }
 
     return {
         async generateKeyPair(): Promise<[DHPrivateKey, DHPublicKey]> {
-            const keyPair: CryptoKeyPair = await subtle.generateKey(
-                {name: "ECDH", namedCurve: name}, true, ["deriveBits"],
-            );
-            return [new PrivateKey(keyPair), new PublicKey(keyPair.publicKey)];
+            const keyPair = ec.genKeyPair();
+            return [new PrivateKey(keyPair), new PublicKey(keyPair.getPublic())];
         },
 
-        async deriveKeyPair(ikm: Uint8Array): Promise<[DHPrivateKey, DHPublicKey]> {
-            // FIXME: this is wrong
-            const keyPair: CryptoKeyPair = await subtle.generateKey(
-                {name: "ECDH", namedCurve: name}, true, ["deriveBits"],
+        // 7.1.2.  DeriveKeyPair
+        async deriveKeyPair(
+            kdf: KDF, suiteId: Uint8Array, ikm: Uint8Array,
+        ): Promise<[DHPrivateKey, DHPublicKey]> {
+            const dkpPrk = await labeledExtract(
+                kdf, suiteId, EMPTY_BYTE_ARRAY, DKP_PRK, ikm,
             );
-            return [new PrivateKey(keyPair), new PublicKey(keyPair.publicKey)];
+            let sk: Uint8Array;
+            let counter = 0;
+            do {
+                if (counter++ > 255) {
+                    throw new Error("Error deriving key pair");
+                }
+                sk = await labeledExpand(
+                    kdf, suiteId,
+                    dkpPrk, CANDIDATE, Uint8Array.from([counter]), privateKeyLength,
+                );
+                sk[0] &= bitmask;
+            } while (eqUint8Array(sk, zeroKey) || geUint8Array(sk, order));
+
+            const keyPair = ec.keyFromPrivate(sk);
+            return [new PrivateKey(keyPair), new PublicKey(keyPair.getPublic())];
         },
 
         async deserialize(enc: Uint8Array): Promise<DHPublicKey> {
-            const pubKey: CryptoKey = await subtle.importKey(
-                "raw", enc,
-                {name: "ECDH", namedCurve: name}, true, ["deriveBits"],
-            );
-            return new PublicKey(pubKey);
+            return new PublicKey(ec.keyFromPublic(enc).getPublic());
         },
 
         publicKeyLength: publicKeyLength,
@@ -79,6 +122,6 @@ function makeDH(
     };
 }
 
-export const p256: DH = makeDH("P-256", 65, 32, 32);
-export const p384: DH = makeDH("P-384", 97, 48, 48);
-export const p521: DH = makeDH("P-521", 133, 66, 64);
+export const p256: DH = makeDH("p256", 65, 32, 32, 0xff);
+export const p384: DH = makeDH("p384", 97, 48, 48, 0xff);
+export const p521: DH = makeDH("p521", 133, 66, 64, 0x01);

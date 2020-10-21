@@ -12,6 +12,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "elliptic": "^6.5.3"
   },
   "devDependencies": {
     "@babel/core": "^7.12.0",
