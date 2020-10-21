@@ -71,7 +71,8 @@ function makeDH(
                 throw new Error("Incompatible private key");
             }
 
-            return privKey.keyPair.derive(this.key).toArrayLike(Uint8Array, "be", 32);
+            return privKey.keyPair.derive(this.key)
+                .toArrayLike(Uint8Array, "be", privateKeyLength);
         }
         async serialize(): Promise<Uint8Array> {
             return Uint8Array.from(this.key.encode());
