@@ -18,7 +18,7 @@ import {p256HkdfSha256} from "../src/hpke/dhkem";
 import {p256HkdfSha256Aes128Gcm} from "../src/hpke";
 
 describe("HPKE", () => {
-    describe("P256-HKDF-SHA256", () => {
+    describe("DHKEM(P256,HKDF-SHA256)", () => {
         it("encapsulates and decapsulates", async () => {
             const [privateKey, publicKey] = await p256HkdfSha256.generateKeyPair();
 
@@ -37,7 +37,7 @@ describe("HPKE", () => {
         });
     });
 
-    describe("P256-HKDF-SHA256/HKDF-SHA256/AES-128-GCM", () => {
+    describe("DHKEM(P256,HKDF-SHA256)/HKDF-SHA256/AES-128-GCM", () => {
         it("creates base context", async () => {
             const [privateKey, publicKey] = await p256HkdfSha256.generateKeyPair();
 

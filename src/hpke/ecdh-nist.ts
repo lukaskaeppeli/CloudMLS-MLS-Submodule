@@ -67,11 +67,11 @@ function makeDH(
     class PublicKey extends DHPublicKey {
         constructor(private readonly key) { super(); }
         async dh(privKey: DHPrivateKey): Promise<Uint8Array> {
-            if (privKey instanceof PrivateKey) {
-                return privKey.keyPair.derive(this.key).toArrayLike(Uint8Array, "be", 32);
-            } else {
+            if (!(privKey instanceof PrivateKey)) {
                 throw new Error("Incompatible private key");
             }
+
+            return privKey.keyPair.derive(this.key).toArrayLike(Uint8Array, "be", 32);
         }
         async serialize(): Promise<Uint8Array> {
             return Uint8Array.from(this.key.encode());

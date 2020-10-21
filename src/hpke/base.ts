@@ -51,14 +51,6 @@ export interface KEM {
     id: number;
 }
 
-export async function defaultGenerateKeyPair(): Promise<[KEMPrivateKey, KEMPublicKey]> {
-    const ikm = new Uint8Array(this.privateKeyLength);
-    window.crypto.getRandomValues(ikm);
-    const ret = this.deriveKeyPair(ikm);
-    ikm.fill(0);
-    return ret;
-}
-
 export abstract class KEMPublicKey {
     /** Produce a byte string of length `KEM.publicKeyLength` encoding the
      * public key.  The encoding can be passed to `KEM.deserialize` to recover
