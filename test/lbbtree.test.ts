@@ -78,5 +78,10 @@ describe("Left-balanced binary tree", () => {
             0, 1, 2, "new3", 4, "new5", "new6", "new7", 8, 9, 10, 11, 12, 13, 14, "new15",
             16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
         ]);
+        // original tree should still be the same
+        expect([...tree]).toEqual([
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+        ]);
     });
 });
