@@ -67,4 +67,16 @@ describe("Left-balanced binary tree", () => {
         expect([...tree.coPathOfLeafNum(12)]).toEqual([7, 19, 26]);
         expect([...tree.coPathOfLeafNum(13)]).toEqual([7, 19, 24]);
     });
+    it("should replace paths", () => {
+        const tree = new Tree<number | string>([
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+        ]);
+        expect([...tree.pathToLeafNum(3)]).toEqual([15, 7, 3, 5, 6]);
+        const newtree = tree.replacePathToLeaf(3, ["new15", "new7", "new3", "new5", "new6"]);
+        expect([...newtree]).toEqual([
+            0, 1, 2, "new3", 4, "new5", "new6", "new7", 8, 9, 10, 11, 12, 13, 14, "new15",
+            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+        ]);
+    });
 });

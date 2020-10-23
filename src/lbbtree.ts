@@ -90,6 +90,19 @@ class PathIterator<Val, Acc> {
     }
 }
 
+class PathDirectionIterator {
+    constructor(
+        private size: number,
+        private leafNum: number,
+    ) {}
+    [Symbol.iterator]() {
+        return new PathIterator<boolean, undefined>(
+            this.size, this.leafNum,
+            (dir: boolean, acc: undefined) => { return [dir, undefined]; },
+            undefined);
+    }
+}
+
 class NodeIterator<T> {
     private path: Node<T>[];
     private dirs: number[];
@@ -148,16 +161,56 @@ class NodeIterator<T> {
     }
 }
 
+function replaceNodePath<T>(
+    node: Node<T>,
+    directions: boolean[],
+    values: T[],
+    fn: (nodeValue: T, value: T) => T,
+    offset: number,
+) {
+    if (offset == values.length - 1) {
+        return new Leaf<T>(fn(node.data, values[offset]));
+    } else {
+        if (!(node instanceof Internal)) {
+            throw new Error("Too few values specified");
+        } else if (directions[offset]) {
+            return new Internal<T>(
+                fn(node.data, values[offset]),
+                node.leftChild,
+                replaceNodePath(node.rightChild, directions, values, fn, offset + 1),
+            );
+        } else {
+            return new Internal<T>(
+                fn(node.data, values[offset]),
+                replaceNodePath(node.leftChild, directions, values, fn, offset + 1),
+                node.rightChild,
+            );
+        }
+    }
+}
+
 export class Tree<T> {
     readonly size: number; // the number of leaf nodes
     readonly root: Node<T>;
-    constructor(data: T[]) {
-        const length = data.length;
-        if (length % 2 !== 1) {
-            throw new Error("Must have an odd number of nodes");
+    constructor(data: T[] | [number, Node<T>]) {
+        if (data.length === 2 &&
+            typeof(data[0]) === "number" &&
+            (data[1] instanceof Internal || data[1] instanceof Leaf)) {
+            this.size = data[0] as number;
+            this.root = data[1] as Node<T>;
+        } else {
+            const length = data.length;
+            if (length % 2 !== 1) {
+                console.log(data);
+                throw new Error("Must have an odd number of nodes");
+            }
+            this.size = (length + 1) / 2;
+            this.root = this.partialTree(data as T[], 0, length);
         }
-        this.size = (length + 1) / 2;
-        this.root = this.partialTree(data, 0, length);
+    }
+
+    [Symbol.iterator]() {
+        return new NodeIterator<T>(this.root);
     }
 
     pathToLeafNum(leafNum: number): PathIterator<T, Node<T>> {
@@ -197,6 +250,22 @@ export class Tree<T> {
             },
             this.root,
         );
+    }
+
+    replacePathToLeaf(
+        leafNum: number, values: T[],
+        transform?: (nodeValue: T, value: T) => T,
+    ): Tree<T> {
+        return new Tree([
+            this.size,
+            replaceNodePath<T>(
+                this.root,
+                [...(new PathDirectionIterator(this.size, leafNum))],
+                values,
+                transform || ((a, b) => b),
+                0,
+            ),
+        ]);
     }
 
     // build a (possibly) partial tree from an array of data
