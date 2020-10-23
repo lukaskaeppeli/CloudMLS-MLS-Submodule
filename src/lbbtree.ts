@@ -90,6 +90,64 @@ class PathIterator<Val, Acc> {
     }
 }
 
+class NodeIterator<T> {
+    private path: Node<T>[];
+    private dirs: number[];
+    constructor(private root: Node<T>) {
+        this.path = [root];
+        this.dirs = [];
+        this.pushLeftPath(root);
+    }
+    private pushLeftPath(start: Node<T>): void {
+        for (let cur = start; cur instanceof Internal;) {
+            cur = cur.leftChild;
+            this.path.push(cur);
+            this.dirs.push(-1)
+        }
+    }
+    next(): {done: boolean, value?: T} {
+        if (this.path.length === 0) {
+            // we've iterated through the whole tree
+            return {done: true}
+        } else if (this.dirs.length === 0) {
+            // special cases where the root is a leaf node
+            const node = this.path.pop();
+            return {done: false, value: node.data};
+        }
+
+        const lastdir = this.dirs.pop();
+        switch (lastdir) {
+            case -1:
+            {
+                const node = this.path.pop();
+                this.dirs.push(0);
+                return {done: false, value: node.data};
+            }
+            case 0:
+            {
+                const node = this.path[this.path.length - 1];
+                this.dirs.push(1);
+                const rightChild = (node as Internal<T>).rightChild;
+                this.path.push(rightChild);
+                this.pushLeftPath(rightChild);
+                return {done: false, value: node.data};
+            }
+            case 1:
+            {
+                const node = this.path.pop();
+                this.path.pop();
+                while (this.dirs.length !== 0 && this.dirs.pop() === 1) {
+                    this.path.pop();
+                }
+                if (this.path.length !== 0) {
+                    this.dirs.push(0);
+                }
+                return {done: false, value: node.data};
+            }
+        }
+    }
+}
+
 export class Tree<T> {
     readonly size: number; // the number of leaf nodes
     readonly root: Node<T>;
