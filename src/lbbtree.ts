@@ -44,7 +44,7 @@ class PathIterator<Val, Acc> {
     constructor(
         private size: number,
         private leafNum: number,
-        private transform: (boolean, Acc) => [Val, Acc],
+        private transform: (dir: boolean, acc: Acc) => [Val, Acc],
         private acc: Acc,
     ) {
         const d = depth(size);
@@ -86,7 +86,7 @@ class PathIterator<Val, Acc> {
         }
     }
     [Symbol.iterator]() {
-        return new PathIterator(this.size, this.leafNum, this.transform, this.acc);
+        return new PathIterator<Val, Acc>(this.size, this.leafNum, this.transform, this.acc);
     }
 }
 
@@ -110,10 +110,10 @@ export class Tree<T> {
                 if (dir === undefined) {
                     return [val, acc];
                 } else if (dir) {
-                    const next = (acc as Internal).rightChild;
+                    const next = (acc as Internal<T>).rightChild;
                     return [val, next];
                 } else {
-                    const next = (acc as Internal).leftChild;
+                    const next = (acc as Internal<T>).leftChild;
                     return [val, next];
                 }
             },
@@ -128,12 +128,12 @@ export class Tree<T> {
                 if (dir === undefined) {
                     return [undefined, acc];
                 } else if (dir) {
-                    const val = (acc as Internal).leftChild.data;
-                    const next = (acc as Internal).rightChild;
+                    const val = (acc as Internal<T>).leftChild.data;
+                    const next = (acc as Internal<T>).rightChild;
                     return [val, next];
                 } else {
-                    const val = (acc as Internal).rightChild.data;
-                    const next = (acc as Internal).leftChild;
+                    const val = (acc as Internal<T>).rightChild.data;
+                    const next = (acc as Internal<T>).leftChild;
                     return [val, next];
                 }
             },
