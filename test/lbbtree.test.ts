@@ -84,4 +84,23 @@ describe("Left-balanced binary tree", () => {
             16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
         ]);
     });
+    it("should add nodes", () => {
+        const t0 = new Tree<number>([0]);
+        function sum(n1, n2) { return n1.data + n2.data; }
+        const t1 = t0.addNode(1, sum);
+        expect([...t1]).toEqual([0, 1, 1]);
+        expect([...t0]).toEqual([0]); // original should be unchanged
+        const t2 = t1.addNode(2, sum);
+        expect([...t2]).toEqual([0, 1, 1, 3, 2]);
+        const t3 = t2.addNode(3, sum);
+        expect([...t3]).toEqual([0, 1, 1, 6, 2, 5, 3]);
+        const t4 = t3.addNode(4, sum);
+        expect([...t4]).toEqual([0, 1, 1, 6, 2, 5, 3, 10, 4]);
+        const t5 = t4.addNode(5, sum);
+        expect([...t5]).toEqual([0, 1, 1, 6, 2, 5, 3, 15, 4, 9, 5]);
+        const t6 = t5.addNode(6, sum);
+        expect([...t6]).toEqual([0, 1, 1, 6, 2, 5, 3, 21, 4, 9, 5, 15, 6]);
+        const t7 = t6.addNode(7, sum);
+        expect([...t7]).toEqual([0, 1, 1, 6, 2, 5, 3, 28, 4, 9, 5, 22, 6, 13, 7]);
+    });
 });

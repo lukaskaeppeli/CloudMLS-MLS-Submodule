@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-/** Left-balanced binary tree
+/** Left-balanced binary tree, implemented using an immutable tree structure.
+ * Operations that modify the tree return a new tree, leaving the original tree
+ * unchanged.
  */
 
 export class Leaf<T> {
@@ -189,6 +191,32 @@ function replaceNodePath<T>(
     }
 }
 
+function addNode<T>(
+    node: Node<T>,
+    size: number,
+    data: T,
+    newDataFn?: (leftChild: Node<T>, rightChild: Node<T>) => T,
+): Node<T> {
+    const d = depth(size)
+    if (size === (1 << d)) {
+        // node is the root of a full tree, so just create a new intermediate
+        // node that's a parent to the old root and the node-to-be-added.
+        const rightChild = new Leaf<T>(data);
+        return new Internal<T>(newDataFn(node, rightChild), node, rightChild);
+    } else {
+        // node is not a full tree, so recurse down the right side
+        const leftTreeSize = 1 << (d-1);
+        const rightChild = addNode<T>(
+            (node as Internal<T>).rightChild, size - leftTreeSize, data, newDataFn,
+        );
+        const leftChild = (node as Internal<T>).leftChild;
+        return new Internal<T>(
+            newDataFn(leftChild, rightChild),
+            leftChild, rightChild,
+        );
+    }
+}
+
 export class Tree<T> {
     readonly size: number; // the number of leaf nodes
     readonly root: Node<T>;
@@ -256,7 +284,7 @@ export class Tree<T> {
         leafNum: number, values: T[],
         transform?: (nodeValue: T, value: T) => T,
     ): Tree<T> {
-        return new Tree([
+        return new Tree<T>([
             this.size,
             replaceNodePath<T>(
                 this.root,
@@ -265,6 +293,16 @@ export class Tree<T> {
                 transform || ((a, b) => b),
                 0,
             ),
+        ]);
+    }
+
+    addNode(
+        data: T,
+        newDataFn?: (leftChild: Node<T>, rightChild: Node<T>) => T,
+    ): Tree<T> {
+        return new Tree<T>([
+            this.size + 1,
+            addNode<T>(this.root, this.size, data, newDataFn),
         ]);
     }
 
