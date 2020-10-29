@@ -29,6 +29,21 @@ describe("TLS presentation language", () => {
             9, 8, 7,
             0, 3, 6, 5, 4,
         ]));
+        expect(tlspl.encode([
+            tlspl.vector(
+                [
+                    tlspl.variableOpaque(Uint8Array.from([1]), 1),
+                    tlspl.variableOpaque(Uint8Array.from([2, 3]), 1),
+                    tlspl.variableOpaque(Uint8Array.from([4, 5, 6]), 1),
+                ],
+                1,
+            ),
+        ])).toEqual(Uint8Array.from([
+            9,
+            1, 1,
+            2, 2, 3,
+            3, 4, 5, 6,
+        ]));
     });
     it("should decode", () => {
         expect(tlspl.decode(
@@ -45,5 +60,16 @@ describe("TLS presentation language", () => {
                 0, 3, 6, 5, 4,
             ]),
         )).toEqual([[1, 512, Uint8Array.from([9, 8, 7]), Uint8Array.from([6, 5, 4])], 11]);
+        expect(tlspl.decode(
+            [
+                tlspl.decodeVector(tlspl.decodeVariableOpaque(1), 1),
+            ],
+            Uint8Array.from([
+                9,
+                1, 1,
+                2, 2, 3,
+                3, 4, 5, 6,
+            ]),
+        )).toEqual([[[Uint8Array.from([1]), Uint8Array.from([2, 3]), Uint8Array.from([4, 5, 6])]], 10]);
     });
 });

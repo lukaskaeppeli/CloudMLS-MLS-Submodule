@@ -18,12 +18,12 @@ limitations under the License.
  * https://tools.ietf.org/html/rfc8446#section-3
  */
 
-interface Item {
+export interface Encoder {
     readonly length: number;
     writeToBuffer: ((buffer: Uint8Array, offset: number) => void);
 }
 
-export class Static implements Item {
+export class Static implements Encoder {
     constructor(private readonly buffer: Uint8Array) {}
     get length(): number {
         return this.buffer.byteLength;
@@ -33,7 +33,7 @@ export class Static implements Item {
     }
 }
 
-export function uint8(num: number): Item {
+export function uint8(num: number): Encoder {
     return {
         length: 1,
         writeToBuffer(buffer: Uint8Array, offset: number): void {
@@ -42,7 +42,7 @@ export function uint8(num: number): Item {
     };
 }
 
-export function uint16(num: number): Item {
+export function uint16(num: number): Encoder {
     return {
         length: 2,
         writeToBuffer(buffer: Uint8Array, offset: number): void {
@@ -51,11 +51,11 @@ export function uint16(num: number): Item {
     };
 }
 
-export function uint24(num: number): Item {
+export function uint24(num: number): Encoder {
     return new Static(Uint8Array.of(num >> 16 & 0xff, num >> 8 & 0xff, num & 0xff));
 }
 
-export function uint32(num: number): Item {
+export function uint32(num: number): Encoder {
     return {
         length: 4,
         writeToBuffer(buffer: Uint8Array, offset: number): void {
@@ -64,7 +64,7 @@ export function uint32(num: number): Item {
     };
 }
 
-export function uint64(num: number): Item {
+export function uint64(num: number): Encoder {
     return {
         length: 8,
         writeToBuffer(buffer: Uint8Array, offset: number): void {
@@ -75,11 +75,11 @@ export function uint64(num: number): Item {
     };
 }
 
-export function opaque(src: Uint8Array): Item {
+export function opaque(src: Uint8Array): Encoder {
     return new Static(src);
 }
 
-export function variableOpaque(src: Uint8Array, lengthBytes: number): Item {
+export function variableOpaque(src: Uint8Array, lengthBytes: number): Encoder {
     if (![1, 2, 4, 8].includes(lengthBytes)) {
         throw new Error("Invalid size for length");
     }
@@ -108,7 +108,42 @@ export function variableOpaque(src: Uint8Array, lengthBytes: number): Item {
     };
 }
 
-export function encode(items: Item[]): Uint8Array {
+// a struct is a concatenation of the fields
+export function struct(items: Encoder[]): Encoder {
+    const length: number = items.reduce(
+        (acc, item) => acc + item.length,
+        0,
+    );
+    return {
+        length,
+        writeToBuffer(buffer: Uint8Array, offset: number): void {
+            let pos = offset;
+            for (const item of items) {
+                item.writeToBuffer(buffer, pos);
+                pos += item.length;
+            }
+        },
+    }
+}
+
+// a vector is the total length of items, followed by each item
+export function vector(items: Encoder[], lengthBytes: number): Encoder {
+    if (![1, 2, 4, 8].includes(lengthBytes)) {
+        throw new Error("Invalid size for length");
+    }
+    const length: number = items.reduce(
+        (acc, item) => acc + item.length,
+        0,
+    );
+    const lengthEncoder =
+        lengthBytes === 1 ? uint8(length) :
+        lengthBytes === 2 ? uint16(length) :
+        lengthBytes === 4 ? uint32(length) :
+        uint64(length);
+    return struct([lengthEncoder].concat(items));
+}
+
+export function encode(items: Encoder[]): Uint8Array {
     const length: number = items.reduce(
         (acc, item) => acc + item.length,
         0,
@@ -124,25 +159,25 @@ export function encode(items: Item[]): Uint8Array {
 
 type Decoder = ((buffer: Uint8Array, offset: number) => [any, number]);
 
-export function decodeUint8(buffer: Uint8Array, offset: number): [any, number] {
+export function decodeUint8(buffer: Uint8Array, offset: number): [number, number] {
     return [buffer[offset], 1];
 }
 
-export function decodeUint16(buffer: Uint8Array, offset: number): [any, number] {
+export function decodeUint16(buffer: Uint8Array, offset: number): [number, number] {
     return [(new DataView(buffer.buffer)).getUint16(offset), 2];
 }
 
-export function decodeUint32(buffer: Uint8Array, offset: number): [any, number] {
+export function decodeUint32(buffer: Uint8Array, offset: number): [number, number] {
     return [(new DataView(buffer.buffer)).getUint32(offset), 4];
 }
 
-export function decodeUint64(buffer: Uint8Array, offset: number): [any, number] {
+export function decodeUint64(buffer: Uint8Array, offset: number): [number, number] {
     const view: DataView = new DataView(buffer.buffer);
     return [view.getUint32(offset) << 32 | view.getUint32(offset + 4), 8];
 }
 
 export function decodeOpaque(length: number): Decoder {
-    return (buffer: Uint8Array, offset: number): [any, number] => {
+    return (buffer: Uint8Array, offset: number): [Uint8Array, number] => {
         return [buffer.subarray(offset, offset + length), length];
     };
 }
@@ -151,7 +186,7 @@ export function decodeVariableOpaque(lengthBytes: number): Decoder {
     if (![1, 2, 4, 8].includes(lengthBytes)) {
         throw new Error("Invalid size for length");
     }
-    return (buffer: Uint8Array, offset: number): [any, number] => {
+    return (buffer: Uint8Array, offset: number): [Uint8Array, number] => {
         const [length, ]: [any, number] =
             lengthBytes == 1 ? decodeUint8(buffer, offset) :
             lengthBytes == 2 ? decodeUint16(buffer, offset) :
@@ -159,6 +194,45 @@ export function decodeVariableOpaque(lengthBytes: number): Decoder {
             decodeUint64(buffer, offset);
         return [buffer.subarray(offset + lengthBytes, offset + lengthBytes + length), lengthBytes + length];
     };
+}
+
+export function decodeStruct(decoders: Decoder[]): Decoder {
+    return (buffer: Uint8Array, offset: number): [any[], number] => {
+        const values: any[] = [];
+        for (const decoder of decoders) {
+            const [val, length]: [any, number] = decoder(buffer, offset);
+            values.push(val);
+            offset += length;
+        }
+        return [values, offset]
+    }
+}
+
+export function decodeVector(decoder: Decoder, lengthBytes: number, numElems?: number): Decoder {
+    if (![1, 2, 4, 8].includes(lengthBytes)) {
+        throw new Error("Invalid size for length");
+    }
+    return (buffer: Uint8Array, offset: number): [any[], number] => {
+        const [length, ]: [any, number] =
+            lengthBytes == 1 ? decodeUint8(buffer, offset) :
+            lengthBytes == 2 ? decodeUint16(buffer, offset) :
+            lengthBytes == 4 ? decodeUint32(buffer, offset) :
+            decodeUint64(buffer, offset);
+        const vec = [];
+        let vecOffset = 0;
+        while (vecOffset < length) {
+            const [elem, elemLength] = decoder(buffer, vecOffset + lengthBytes);
+            vec.push(elem);
+            vecOffset += elemLength;
+        }
+        if (vecOffset !== length) {
+            throw new Error("Claimed vector size does not match actual size");
+        }
+        if (numElems !== undefined && vec.length !== numElems) {
+            throw new Error("Wrong number of elements");
+        }
+        return [vec, offset + lengthBytes + length];
+    }
 }
 
 export function decode(
