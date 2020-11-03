@@ -187,6 +187,7 @@ export function decodeVariableOpaque(lengthBytes: number): Decoder {
         throw new Error("Invalid size for length");
     }
     return (buffer: Uint8Array, offset: number): [Uint8Array, number] => {
+        // eslint-disable-next-line comma-dangle, array-bracket-spacing
         const [length, ]: [any, number] =
             lengthBytes == 1 ? decodeUint8(buffer, offset) :
             lengthBytes == 2 ? decodeUint16(buffer, offset) :
@@ -213,6 +214,7 @@ export function decodeVector(decoder: Decoder, lengthBytes: number, numElems?: n
         throw new Error("Invalid size for length");
     }
     return (buffer: Uint8Array, offset: number): [any[], number] => {
+        // eslint-disable-next-line comma-dangle, array-bracket-spacing
         const [length, ]: [any, number] =
             lengthBytes == 1 ? decodeUint8(buffer, offset) :
             lengthBytes == 2 ? decodeUint16(buffer, offset) :
