@@ -30,6 +30,7 @@ describe("credential", () => {
             await pubKey.serialize(),
         ]);
 
+        // eslint-disable-next-line comma-dangle, array-bracket-spacing
         const [[credential], ] = tlspl.decode([Credential.decode], encodedCredential);
 
         const signature: Uint8Array = await privKey.sign(Uint8Array.from([1, 2, 3]));
@@ -46,6 +47,7 @@ describe("credential", () => {
             await pubKey.serialize(),
         ]);
 
+        // eslint-disable-next-line comma-dangle, array-bracket-spacing
         const [[credential], ] = tlspl.decode([Credential.decode], encodedCredential);
 
         expect(tlspl.encode([credential.encoder])).toEqual(encodedCredential);
