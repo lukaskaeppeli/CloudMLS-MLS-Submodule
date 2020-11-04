@@ -18,7 +18,21 @@ limitations under the License.
  * https://tools.ietf.org/html/draft-irtf-cfrg-hpke-05
  */
 
-import {concatUint8Array, EMPTY_BYTE_ARRAY, stringToUint8Array} from "../util";
+import {concatUint8Array, stringToUint8Array} from "../util";
+import {
+    EMPTY_BYTE_ARRAY,
+    EAE_PRK,
+    SHARED_SECRET,
+    PSK_ID_HASH,
+    INFO_HASH,
+    PSK_HASH,
+    SECRET,
+    KEY,
+    NONCE,
+    EXP,
+    HPKE as HPKE_BUFFER,
+    SEC,
+} from "../constants";
 
 // 4.  Cryptographic Dependencies
 
@@ -209,9 +223,6 @@ export abstract class DHPublicKey {
     abstract serialize(): Promise<Uint8Array>;
 }
 
-const EAE_PRK = stringToUint8Array("eae_prk");
-const SHARED_SECRET = stringToUint8Array("shared_secret");
-
 export function makeDHKEM(dhGroup: DH, kdf: KDF, kemId: number): KEM {
     const suiteId = stringToUint8Array("KEMxx");
     suiteId[3] = kemId >> 8 & 0xff;
@@ -339,23 +350,15 @@ enum Mode {
 
 const PSK_MODES = [Mode.Psk, Mode.AuthPsk];
 
-const PSK_ID_HASH = stringToUint8Array("psk_id_hash");
-const INFO_HASH = stringToUint8Array("info_hash");
-const PSK_HASH = stringToUint8Array("psk_hash");
-const SECRET = stringToUint8Array("secret");
-const KEY = stringToUint8Array("key");
-const NONCE = stringToUint8Array("nonce");
-const EXP = stringToUint8Array("exp");
-
 export class HPKE {
     private readonly suiteId: Uint8Array;
     constructor(
-        private readonly kem: KEM,
-        private readonly kdf: KDF,
-        private readonly aead: AEAD,
+        readonly kem: KEM,
+        readonly kdf: KDF,
+        readonly aead: AEAD,
     ) {
         this.suiteId = concatUint8Array([
-            stringToUint8Array("HPKE"),
+            HPKE_BUFFER,
             Uint8Array.from([
                 kem.id >> 8 & 0xff, kem.id & 0xff,
                 kdf.id >> 8 & 0xff, kdf.id & 0xff,
@@ -626,8 +629,6 @@ export class HPKE {
 }
 
 // 5.2.  Encryption and Decryption
-
-const SEC = stringToUint8Array("sec");
 
 class Context {
     private sequence: Uint8Array;

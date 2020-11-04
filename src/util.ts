@@ -14,8 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-export const EMPTY_BYTE_ARRAY = new Uint8Array(0);
-
 export function concatUint8Array(arrays: Uint8Array[]): Uint8Array {
     const len = arrays.reduce((acc: number, arr: ArrayBuffer) => acc + arr.byteLength, 0);
     const ret = new Uint8Array(len);

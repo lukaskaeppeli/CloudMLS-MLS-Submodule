@@ -18,13 +18,10 @@ limitations under the License.
  */
 
 import {KDF, DH, DHPublicKey, DHPrivateKey, labeledExtract, labeledExpand} from "./base"
-import {EMPTY_BYTE_ARRAY, stringToUint8Array} from "../util";
+import {EMPTY_BYTE_ARRAY, DKP_PRK, SK} from "../constants";
 import {ec as EC} from "elliptic";
 
 // 4.1.  DH-Based KEM
-
-const DKP_PRK = stringToUint8Array("dkp_prk");
-const SK = stringToUint8Array("sk");
 
 function makeDH(
     name: string,

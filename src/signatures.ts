@@ -16,7 +16,7 @@ limitations under the License.
 
 // methods for creating signatures
 
-import {EMPTY_BYTE_ARRAY} from "./util";
+import {EMPTY_BYTE_ARRAY} from "./constants";
 import {eddsa as EdDSA} from "elliptic";
 
 const subtle = window.crypto.subtle;
