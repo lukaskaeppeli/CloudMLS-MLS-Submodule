@@ -23,11 +23,26 @@ import {CredentialType, SignatureScheme} from "./constants";
 import {SigningPublicKey, Ed25519} from "./signatures";
 import * as tlspl from "../src/tlspl";
 
-abstract class BasicCredential {
-    readonly identity: Uint8Array;
-    readonly signatureScheme: SignatureScheme;
-    readonly signatureKey: Uint8Array;
-    abstract verify(message: Uint8Array, signature: Uint8Array): Promise<boolean>;
+class BasicCredential {
+    private publicKey: SigningPublicKey;
+    constructor(
+        readonly identity: Uint8Array,
+        readonly signatureScheme: SignatureScheme,
+        readonly signatureKey: Uint8Array,
+    ) {}
+    async verify(message: Uint8Array, signature: Uint8Array): Promise<boolean> {
+        if (!this.publicKey) {
+            switch (this.signatureScheme) {
+                case SignatureScheme.ed25519:
+                    this.publicKey = await Ed25519.deserializePublic(this.signatureKey);
+                    break;
+                // FIXME: other signature schemes
+                default:
+                    throw new Error("Unsupported signature scheme");
+            }
+        }
+        return this.publicKey.verify(message, signature);
+    }
     get encoder(): tlspl.Encoder {
         return tlspl.struct([
             tlspl.variableOpaque(this.identity, 2),
@@ -36,25 +51,6 @@ abstract class BasicCredential {
         ]);
     }
 }
-
-class BasicEd25519Credential extends BasicCredential {
-    private publicKey: SigningPublicKey;
-    constructor(
-        readonly identity: Uint8Array,
-        readonly signatureKey: Uint8Array,
-    ) {
-        super();
-        this.signatureScheme = SignatureScheme.ed25519;
-    }
-    async verify(message: Uint8Array, signature: Uint8Array): Promise<boolean> {
-        if (!this.publicKey) {
-            this.publicKey = await Ed25519.deserializePublic(this.signatureKey);
-        }
-        return await this.publicKey.verify(message, signature);
-    }
-}
-
-// FIXME: other signature schemes
 
 export class Credential {
     readonly signatureScheme: SignatureScheme;
@@ -81,18 +77,13 @@ export class Credential {
                     ],
                     buffer, offset1,
                 );
-                switch (signatureScheme) {
-                    case SignatureScheme.ed25519:
-                        return [
-                            new Credential(
-                                CredentialType.Basic,
-                                new BasicEd25519Credential(identity, signatureKey),
-                            ),
-                            offset2,
-                        ];
-                    default:
-                        throw new Error("Unsupported signature scheme");
-                }
+                return [
+                    new Credential(
+                        CredentialType.Basic,
+                        new BasicCredential(identity, signatureScheme, signatureKey),
+                    ),
+                    offset2,
+                ];
             }
             default:
                 throw new Error("Unsupported credential type");
