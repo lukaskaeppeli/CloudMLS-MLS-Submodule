@@ -160,25 +160,25 @@ export function encode(items: Encoder[]): Uint8Array {
 type Decoder = ((buffer: Uint8Array, offset: number) => [any, number]);
 
 export function decodeUint8(buffer: Uint8Array, offset: number): [number, number] {
-    return [buffer[offset], 1];
+    return [buffer[offset], offset + 1];
 }
 
 export function decodeUint16(buffer: Uint8Array, offset: number): [number, number] {
-    return [(new DataView(buffer.buffer)).getUint16(offset), 2];
+    return [(new DataView(buffer.buffer)).getUint16(offset), offset + 2];
 }
 
 export function decodeUint32(buffer: Uint8Array, offset: number): [number, number] {
-    return [(new DataView(buffer.buffer)).getUint32(offset), 4];
+    return [(new DataView(buffer.buffer)).getUint32(offset), offset + 4];
 }
 
 export function decodeUint64(buffer: Uint8Array, offset: number): [number, number] {
     const view: DataView = new DataView(buffer.buffer);
-    return [view.getUint32(offset) << 32 | view.getUint32(offset + 4), 8];
+    return [view.getUint32(offset) << 32 | view.getUint32(offset + 4), offset + 8];
 }
 
 export function decodeOpaque(length: number): Decoder {
     return (buffer: Uint8Array, offset: number): [Uint8Array, number] => {
-        return [buffer.subarray(offset, offset + length), length];
+        return [buffer.subarray(offset, offset + length), offset + length];
     };
 }
 
@@ -193,7 +193,10 @@ export function decodeVariableOpaque(lengthBytes: number): Decoder {
             lengthBytes == 2 ? decodeUint16(buffer, offset) :
             lengthBytes == 4 ? decodeUint32(buffer, offset) :
             decodeUint64(buffer, offset);
-        return [buffer.subarray(offset + lengthBytes, offset + lengthBytes + length), lengthBytes + length];
+        return [
+            buffer.subarray(offset + lengthBytes, offset + lengthBytes + length),
+            offset + lengthBytes + length,
+        ];
     };
 }
 
@@ -201,9 +204,9 @@ export function decodeStruct(decoders: Decoder[]): Decoder {
     return (buffer: Uint8Array, offset: number): [any[], number] => {
         const values: any[] = [];
         for (const decoder of decoders) {
-            const [val, length]: [any, number] = decoder(buffer, offset);
+            const [val, newOffset]: [any, number] = decoder(buffer, offset);
             values.push(val);
-            offset += length;
+            offset = newOffset;
         }
         return [values, offset]
     }
@@ -215,25 +218,26 @@ export function decodeVector(decoder: Decoder, lengthBytes: number, numElems?: n
     }
     return (buffer: Uint8Array, offset: number): [any[], number] => {
         // eslint-disable-next-line comma-dangle, array-bracket-spacing
-        const [length, ]: [any, number] =
+        let [length, ]: [any, number] =
             lengthBytes == 1 ? decodeUint8(buffer, offset) :
             lengthBytes == 2 ? decodeUint16(buffer, offset) :
             lengthBytes == 4 ? decodeUint32(buffer, offset) :
             decodeUint64(buffer, offset);
         const vec = [];
-        let vecOffset = 0;
-        while (vecOffset < length) {
-            const [elem, elemLength] = decoder(buffer, vecOffset + lengthBytes);
+        offset += lengthBytes;
+        while (length > 0) {
+            const [elem, newOffset] = decoder(buffer, offset);
             vec.push(elem);
-            vecOffset += elemLength;
+            length -= newOffset - offset;
+            offset = newOffset;
         }
-        if (vecOffset !== length) {
+        if (length !== 0) {
             throw new Error("Claimed vector size does not match actual size");
         }
         if (numElems !== undefined && vec.length !== numElems) {
             throw new Error("Wrong number of elements");
         }
-        return [vec, offset + lengthBytes + length];
+        return [vec, offset];
     }
 }
 
@@ -242,9 +246,9 @@ export function decode(
 ): [any[], number] {
     const values: any[] = [];
     for (const decoder of decoders) {
-        const [val, length]: [any, number] = decoder(buffer, offset);
+        const [val, newOffset]: [any, number] = decoder(buffer, offset);
         values.push(val);
-        offset += length;
+        offset = newOffset;
     }
     return [values, offset]
 }
