@@ -30,8 +30,6 @@ function makeDH(
     secretLength: number,
 ): DH {
     const ec = new EC(name);
-    const zeroKey = new Uint8Array(privateKeyLength);
-    const order = ec.n.toArrayLike(Uint8Array, "be", privateKeyLength);
 
     class PublicKey extends DHPublicKey {
         constructor(private readonly key) { super(); }

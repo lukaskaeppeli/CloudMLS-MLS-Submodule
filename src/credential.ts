@@ -21,7 +21,7 @@ limitations under the License.
 
 import {CredentialType, SignatureScheme} from "./constants";
 import {SigningPublicKey, Ed25519} from "./signatures";
-import * as tlspl from "../src/tlspl";
+import * as tlspl from "./tlspl";
 
 class BasicCredential {
     private publicKey: SigningPublicKey;
