@@ -23,7 +23,7 @@ import {CredentialType, SignatureScheme} from "./constants";
 import {SigningPublicKey, Ed25519} from "./signatures";
 import * as tlspl from "./tlspl";
 
-class BasicCredential {
+export class BasicCredential {
     private publicKey: SigningPublicKey;
     constructor(
         readonly identity: Uint8Array,
@@ -42,6 +42,18 @@ class BasicCredential {
             }
         }
         return this.publicKey.verify(message, signature);
+    }
+
+    static decode(buffer: Uint8Array, offset: number): [BasicCredential, number] {
+        const [[identity, signatureScheme, signatureKey], offset1] = tlspl.decode(
+            [
+                tlspl.decodeVariableOpaque(2),
+                tlspl.decodeUint16,
+                tlspl.decodeVariableOpaque(2),
+            ],
+            buffer, offset,
+        );
+        return [new BasicCredential(identity, signatureScheme, signatureKey), offset1];
     }
     get encoder(): tlspl.Encoder {
         return tlspl.struct([
@@ -69,19 +81,11 @@ export class Credential {
         switch (credentialType) {
             case CredentialType.Basic:
             {
-                const [[identity, signatureScheme, signatureKey], offset2] = tlspl.decode(
-                    [
-                        tlspl.decodeVariableOpaque(2),
-                        tlspl.decodeUint16,
-                        tlspl.decodeVariableOpaque(2),
-                    ],
-                    buffer, offset1,
+                const [[basicCredential], offset2] = tlspl.decode(
+                    [BasicCredential.decode], buffer, offset1,
                 );
                 return [
-                    new Credential(
-                        CredentialType.Basic,
-                        new BasicCredential(identity, signatureScheme, signatureKey),
-                    ),
+                    new Credential(CredentialType.Basic, basicCredential),
                     offset2,
                 ];
             }
