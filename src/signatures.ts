@@ -69,7 +69,7 @@ export const Ed25519: SignatureScheme = {
         return new Ed25519PrivateKey(keyPair);
     },
     async deserializePublic(enc: Uint8Array): Promise<SigningPublicKey> {
-        const keyPair = ed25519.keyFromPublic(enc)
+        const keyPair = ed25519.keyFromPublic([...enc.values()]);
         return new Ed25519PublicKey(keyPair);
     },
 
