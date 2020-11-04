@@ -77,7 +77,7 @@ export const Ed25519: SignatureScheme = {
     publicKeyLength: 32,
 }
 
-export class Ed25519PrivateKey implements SigningPrivateKey {
+class Ed25519PrivateKey implements SigningPrivateKey {
     constructor(private readonly keyPair) {}
 
     async sign(message: Uint8Array): Promise<Uint8Array> {
@@ -88,7 +88,7 @@ export class Ed25519PrivateKey implements SigningPrivateKey {
     }
 }
 
-export class Ed25519PublicKey implements SigningPublicKey {
+class Ed25519PublicKey implements SigningPublicKey {
     constructor(private readonly keyPair) {}
 
     async verify(message: Uint8Array, signature: Uint8Array): Promise<boolean> {
