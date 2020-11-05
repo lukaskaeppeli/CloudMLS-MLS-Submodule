@@ -55,3 +55,44 @@ export class HPKECiphertext {
         ]);
     }
 }
+
+// https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#update-paths
+
+export class UpdatePathNode {
+    constructor(
+        readonly publicKey: Uint8Array, // encoding of the node's KEMPublicKey
+        readonly encryptedPathSecret: HPKECiphertext,
+    ) {}
+
+    static decode(buffer: Uint8Array, offset: number): [UpdatePathNode, number] {
+        const [[publicKey, encryptedPathSecret], offset1] = tlspl.decode(
+            [tlspl.decodeVariableOpaque(2), HPKECiphertext.decode],
+            buffer, offset,
+        );
+        return [new UpdatePathNode(publicKey, encryptedPathSecret), offset1];
+    }
+    get encoder(): tlspl.Encoder {
+        return tlspl.struct([
+            tlspl.variableOpaque(this.publicKey, 2),
+            this.encryptedPathSecret.encoder,
+        ]);
+    }
+}
+
+export class UpdatePath {
+    constructor(readonly leafKeyPackage: KeyPackage, readonly nodes: UpdatePathNode[]) {}
+
+    static decode(buffer: Uint8Array, offset: number): [UpdatePath, number] {
+        const [[leafKeyPackage, nodes], offset1] = tlspl.decode(
+            [KeyPackage.decode, tlspl.decodeVector(UpdatePathNode.decode, 4)],
+            buffer, offset,
+        );
+        return [new UpdatePath(leafKeyPackage, nodes), offset1];
+    }
+    get encoder(): tlspl.Encoder {
+        return tlspl.struct([
+            this.leafKeyPackage.encoder,
+            tlspl.vector(this.nodes.map(x => x.encoder), 4),
+        ]);
+    }
+}

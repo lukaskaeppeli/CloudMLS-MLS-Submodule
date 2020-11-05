@@ -260,18 +260,18 @@ export class Tree<T> {
         );
     }
 
-    coPathOfLeafNum(leafNum: number): PathIterator<T, Node<T>> {
+    coPathOfLeafNum(leafNum: number): PathIterator<Node<T>, Node<T>> {
         return new PathIterator(
             this.size, leafNum,
             (dir: boolean | undefined, acc: Node<T>) => {
                 if (dir === undefined) {
                     return [undefined, acc];
                 } else if (dir) {
-                    const val = (acc as Internal<T>).leftChild.data;
+                    const val = (acc as Internal<T>).leftChild;
                     const next = (acc as Internal<T>).rightChild;
                     return [val, next];
                 } else {
-                    const val = (acc as Internal<T>).rightChild.data;
+                    const val = (acc as Internal<T>).rightChild;
                     const next = (acc as Internal<T>).leftChild;
                     return [val, next];
                 }
