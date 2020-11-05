@@ -19,34 +19,8 @@ limitations under the License.
 
 import {KDF, DH, DHPublicKey, DHPrivateKey, labeledExtract, labeledExpand} from "./base"
 import {EMPTY_BYTE_ARRAY, CANDIDATE, DKP_PRK} from "../constants";
+import {eqUint8Array, geUint8Array} from "../util";
 import {ec as EC} from "elliptic";
-
-function eqUint8Array(a: Uint8Array, b: Uint8Array) {
-    if (a.length != b.length) {
-        return false;
-    }
-    for (let i = 0; i < a.length; i++) {
-        if (a[i] != b[i]) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// is the first array greater or equal to the second array
-function geUint8Array(a: Uint8Array, b: Uint8Array) {
-    if (a.length != b.length) {
-        throw new Error("Length must be the same");
-    }
-    for (let i = 0; i < a.length; i++) {
-        if (a[i] > b[i]) {
-            return true;
-        } else if (a[i] < b[i]) {
-            return false;
-        }
-    }
-    return true;
-}
 
 // 4.1.  DH-Based KEM
 

@@ -25,10 +25,55 @@ export function concatUint8Array(arrays: Uint8Array[]): Uint8Array {
     return ret;
 }
 
+export function eqUint8Array(a: Uint8Array, b: Uint8Array) {
+    if (a.length != b.length) {
+        return false;
+    }
+    // FIXME: this should probably be constant-time instead of short-circuited
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] != b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// is the first array greater or equal to the second array
+export function geUint8Array(a: Uint8Array, b: Uint8Array) {
+    if (a.length != b.length) {
+        throw new Error("Length must be the same");
+    }
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] > b[i]) {
+            return true;
+        } else if (a[i] < b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 export function stringToUint8Array(str: string): Uint8Array {
     const ret = new Uint8Array(str.length);
     for (let i = 0; i < str.length; i++) {
         ret[i] = str.charCodeAt(i);
+    }
+    return ret;
+}
+
+const hexMap: Record<string, number> = {};
+for (let i = 0; i < 256; i++) {
+    let hex = i.toString(16);
+    if (hex.length < 2) {
+        hex = "0" + hex;
+    }
+    hexMap[hex] = i;
+}
+
+export function hexToUint8Array(str: string): Uint8Array {
+    const ret = new Uint8Array(str.length / 2);
+    for (let i = 0; 2*i < str.length; i++) {
+        ret[i] = hexMap[str.substring(2*i, 2*i+2)];
     }
     return ret;
 }

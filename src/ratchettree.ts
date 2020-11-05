@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import {EMPTY_BYTE_ARRAY, NODE, PATH} from "./constants";
+import {eqUint8Array} from "./util";
 import {Leaf, Internal, Node, Tree} from "./lbbtree";
 import {KeyPackage} from "./keypackage";
 import {KEMPrivateKey, KEMPublicKey, HPKE} from "./hpke/base";
@@ -121,7 +122,7 @@ export class RatchetTreeView {
                 // corresponding copath node MUST be filtered by removing all
                 // new leaf nodes added as part of this MLS Commit message."
                 updatePathNodes.push(new UpdatePathNode(
-                    await nodeData.publicKey.serialize(),
+                    await currNodePub.serialize(),
                     await HPKECiphertext.encrypt(
                         this.hpke,
                         nodeData.publicKey,
@@ -203,7 +204,10 @@ export class RatchetTreeView {
             const currNodeSecret = await deriveSecret(this.hpke, currPathSecret, NODE);
             const [currNodePriv, currNodePub] = await this.hpke.kem.deriveKeyPair(currNodeSecret);
 
-            // FIXME: check that derived pubkey matches updatePathNode.publicKey
+            const serializedPubKey = await currNodePub.serialize();
+            if (!eqUint8Array(serializedPubKey, updatePath.nodes[i].publicKey)) {
+                throw new Error("Derived public key does not match");
+            }
 
             newPath.push(new NodeData(
                 currNodePriv,
