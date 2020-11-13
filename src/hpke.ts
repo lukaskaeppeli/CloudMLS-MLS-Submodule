@@ -19,7 +19,6 @@ limitations under the License.
  */
 
 import {p256, p384, p521} from "./hpke/ecdh-nist";
-import {x25519} from "./hpke/ecdh-x";
 import {hkdfSha256, hkdfSha384, hkdfSha512} from "./hpke/hkdf";
 import {
     p256HkdfSha256,

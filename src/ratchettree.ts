@@ -16,13 +16,12 @@ limitations under the License.
 
 import {EMPTY_BYTE_ARRAY, NODE, PATH} from "./constants";
 import {eqUint8Array} from "./util";
-import {Leaf, Internal, Node, Tree} from "./lbbtree";
+import {Leaf, Node, Tree} from "./lbbtree";
 import {KeyPackage} from "./keypackage";
 import {KEMPrivateKey, KEMPublicKey, HPKE} from "./hpke/base";
 import {deriveSecret} from "./keyschedule";
 import {Credential} from "./credential";
 import {HPKECiphertext, UpdatePathNode, UpdatePath} from "./message";
-import * as tlspl from "./tlspl";
 
 /** The ratchet tree allows group members to efficiently update the group secrets.
  */

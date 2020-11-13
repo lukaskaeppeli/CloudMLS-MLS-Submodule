@@ -65,7 +65,6 @@ export class BasicCredential {
 }
 
 export class Credential {
-    readonly signatureScheme: SignatureScheme;
     constructor(
         readonly credentialType: CredentialType,
         readonly credential: BasicCredential, // FIXME: or x509 certificate

@@ -208,7 +208,7 @@ export function decodeStruct(decoders: Decoder[]): Decoder {
             values.push(val);
             offset = newOffset;
         }
-        return [values, offset]
+        return [values, offset];
     }
 }
 

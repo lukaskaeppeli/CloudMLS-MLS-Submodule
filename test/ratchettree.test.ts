@@ -25,7 +25,7 @@ import {stringToUint8Array} from "../src/util";
 import {Tree} from "../src/lbbtree";
 
 describe("Ratchet Tree", () => {
-    it("should update", async () => {
+    it("should update path", async () => {
         const [signingPrivKey, signingPubKey] = await Ed25519.generateKeyPair();
         const credential = new Credential(
             CredentialType.Basic,
@@ -79,7 +79,7 @@ describe("Ratchet Tree", () => {
             ]),
         );
         const ratchetTreeView2v0 = new RatchetTreeView(
-            x25519HkdfSha256Aes128Gcm, 1,
+            x25519HkdfSha256Aes128Gcm, 2,
             new Tree<NodeData>([
                 new NodeData(undefined, hpkePubKey0, [], undefined, undefined),
                 new NodeData(undefined, hpkePubKey1, [], undefined, undefined),
