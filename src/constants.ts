@@ -100,3 +100,21 @@ export enum ProtocolVersion {
     Reserved = 0,
     Mls10 = 1,
 }
+
+// uint8
+export enum ProposalType {
+    Reserved =0,
+    Add = 1,
+    Update = 2,
+    Remove = 3,
+    Psk = 4,
+    Reinit = 5,
+    ExternalInit = 6,
+}
+
+// uint8
+export enum ProposalOrRefType {
+    Reserved = 0,
+    Proposal = 1,
+    Reference = 2,
+}

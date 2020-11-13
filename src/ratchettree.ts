@@ -14,14 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import {EMPTY_BYTE_ARRAY, NODE, PATH} from "./constants";
+import {EMPTY_BYTE_ARRAY, NODE, PATH, ProposalType} from "./constants";
 import {eqUint8Array} from "./util";
 import {Leaf, Node, Tree} from "./lbbtree";
 import {KeyPackage} from "./keypackage";
 import {KEMPrivateKey, KEMPublicKey, HPKE} from "./hpke/base";
 import {deriveSecret} from "./keyschedule";
 import {Credential} from "./credential";
-import {HPKECiphertext, UpdatePathNode, UpdatePath} from "./message";
+import {HPKECiphertext, UpdatePathNode, UpdatePath, Add, Update, Remove, Proposal} from "./message";
 
 /** The ratchet tree allows group members to efficiently update the group secrets.
  */
@@ -73,15 +73,47 @@ function resolutionOf(node: Node<NodeData>): NodeData[] {
 type MakeKeyPackage = (pubKey: Uint8Array) => Promise<KeyPackage>;
 
 export class RatchetTreeView {
+    readonly idToLeafNum: Map<string, number>;
+    readonly emptyLeaves: number[];
     constructor(
         readonly hpke: HPKE,
-        readonly nodeNum: number,
+        readonly leafNum: number,
         readonly tree: Tree<NodeData>,
-    ) {}
+        idToLeafNum?: Map<string, number>,
+        emptyLeaves?: number[],
+    ) {
+        if (idToLeafNum === undefined) {
+            this.idToLeafNum = new Map(
+                [...tree]
+                    .filter((val, idx) => !(idx % 2))
+                    .map((val, idx): [string, number] => {
+                        if (val.credential) {
+                            // FIXME: do something better than toString?
+                            return [val.credential.credential.identity.toString(), idx];
+                        } else {
+                            return undefined;
+                        }
+                    })
+                    .filter(val => val !== undefined),
+            );
+        } else {
+            this.idToLeafNum = idToLeafNum;
+        }
+        if (emptyLeaves === undefined) {
+            this.emptyLeaves =
+                [...tree]
+                    .filter((val, idx) => !(idx % 0))
+                    .map((val, idx): [NodeData, number] => [val, idx])
+                    .filter(v => v[0].publicKey === undefined)
+                    .map(v => v[1]);
+        } else {
+            this.emptyLeaves = emptyLeaves;
+        }
+    }
 
     async update(makeKeyPackage: MakeKeyPackage): Promise<[UpdatePath, RatchetTreeView]> {
         // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#ratchet-tree-evolution
-        const copath = [...this.tree.coPathOfLeafNum(this.nodeNum)].reverse();
+        const copath = [...this.tree.coPathOfLeafNum(this.leafNum)].reverse();
         const n = copath.length;
 
         // FIXME: is this the right length?
@@ -138,16 +170,16 @@ export class RatchetTreeView {
         const updatePath = new UpdatePath(keyPackage, updatePathNodes);
 
         // update our tree
-        const newTree = this.tree.replacePathToLeaf(this.nodeNum, newPath.reverse());
+        const newTree = this.tree.replacePathToLeaf(this.leafNum, newPath.reverse());
 
-        return [updatePath, new RatchetTreeView(this.hpke, this.nodeNum, newTree)];
+        return [updatePath, new RatchetTreeView(this.hpke, this.leafNum, newTree)];
     }
 
     async applyUpdatePath(fromNode: number, updatePath: UpdatePath): Promise<RatchetTreeView> {
         // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#synchronizing-views-of-the-tree
 
         const privateKeys =
-            [...this.tree.pathToLeafNum(this.nodeNum)]
+            [...this.tree.pathToLeafNum(this.leafNum)]
                 .map(data => data.privateKey)
                 .filter(data => data !== undefined);
 
@@ -221,6 +253,151 @@ export class RatchetTreeView {
 
         const newTree = this.tree.replacePathToLeaf(fromNode, newPath.reverse());
 
-        return new RatchetTreeView(this.hpke, this.nodeNum, newTree);
+        return new RatchetTreeView(
+            this.hpke,
+            this.leafNum,
+            newTree,
+            this.idToLeafNum,
+            this.emptyLeaves,
+        );
+    }
+
+    async applyProposals(proposals: Proposal[]): Promise<RatchetTreeView> {
+        let tree = this.tree;
+        // removes are applied first, then updates, then adds
+        const adds: Add[] = [];
+        const updates: Update[] = [];
+        const removes: Remove[] = [];
+        let idToLeafNum = this.idToLeafNum;
+        let emptyLeaves = this.emptyLeaves;
+
+        for (const proposal of proposals) {
+            switch (proposal.msgType) {
+                case ProposalType.Add:
+                    adds.push(proposal as Add);
+                    break;
+                case ProposalType.Update:
+                    updates.push(proposal as Update);
+                    break;
+                case ProposalType.Remove:
+                    removes.push(proposal as Remove);
+                    break;
+                default:
+                    throw new Error("Unknown proposal type");
+            }
+        }
+
+        if (removes.length) {
+            idToLeafNum = new Map(idToLeafNum);
+            emptyLeaves = Array.from(emptyLeaves);
+            for (const remove of removes) {
+                const path = [...tree.pathToLeafNum(remove.removed)];
+
+                idToLeafNum.delete(path[path.length - 1].credential.credential.identity.toString());
+                emptyLeaves.push(remove.removed);
+
+                const newPath =
+                    path.map((data) => {
+                        return new NodeData(
+                            undefined,
+                            undefined,
+                            data.unmergedLeaves, // FIXME: ???
+                            undefined,
+                            undefined, // FIXME:
+                        );
+                    });
+                tree = tree.replacePathToLeaf(remove.removed, newPath);
+            }
+        }
+
+        for (const update of updates) {
+            const leafNum = this.idToLeafNum.get(update.keyPackage.credential.credential.identity.toString());
+            // FIXME: make sure the update's credential matches the credential
+            // we already have
+            const publicKey = await update.keyPackage.getHpkeKey();
+            const leafData = new NodeData(
+                leafNum === this.leafNum ? update.privateKey : undefined,
+                publicKey,
+                [],
+                update.keyPackage.credential,
+                undefined, // FIXME:
+            );
+            const path = [...tree.pathToLeafNum(leafNum)]
+                .map((data, idx, arr) => {
+                    if (idx === arr.length - 1) {
+                        return leafData;
+                    } else {
+                        return new NodeData(
+                            undefined,
+                            undefined,
+                            data.unmergedLeaves.concat([leafData]), // FIXME: ???
+                            undefined,
+                            undefined, // FIXME:
+                        );
+                    }
+                });
+            tree = tree.replacePathToLeaf(leafNum, path);
+        }
+
+        if (adds.length) {
+            if (!removes.length) {
+                idToLeafNum = new Map(idToLeafNum);
+                emptyLeaves = Array.from(emptyLeaves);
+            }
+            emptyLeaves.sort();
+            for (const add of adds) {
+                const publicKey = await add.keyPackage.getHpkeKey();
+                const leafData = new NodeData(
+                    undefined,
+                    publicKey,
+                    [],
+                    add.keyPackage.credential,
+                    undefined, // FIXME:
+                );
+                if (emptyLeaves.length) {
+                    const leafNum = emptyLeaves.shift();
+                    const path = [...tree.pathToLeafNum(leafNum)]
+                        .map((data, idx, arr) => {
+                            if (idx === arr.length - 1) {
+                                return leafData;
+                            } else {
+                                return new NodeData(
+                                    undefined,
+                                    undefined,
+                                    data.unmergedLeaves.concat([leafData]), // FIXME: ???
+                                    undefined,
+                                    undefined, // FIXME:
+                                );
+                            }
+                        });
+                    tree = tree.replacePathToLeaf(leafNum, path);
+                    idToLeafNum.set(add.keyPackage.credential.credential.identity.toString(), leafNum);
+                } else {
+                    const leafNum = tree.size;
+                    tree = tree.addNode(
+                        leafData,
+                        (leftChild, rightChild) => {
+                            return new NodeData(
+                                undefined,
+                                undefined,
+                                leftChild.data.unmergedLeaves.concat([leafData]), // FIXME: ???
+                                undefined,
+                                undefined, // FIXME:
+                            );
+                        },
+                    );
+                    idToLeafNum.set(add.keyPackage.credential.credential.identity.toString(), leafNum);
+                }
+            }
+        }
+
+
+        return new RatchetTreeView(
+            this.hpke,
+            this.leafNum,
+            tree,
+            idToLeafNum,
+            emptyLeaves,
+        );
     }
 }

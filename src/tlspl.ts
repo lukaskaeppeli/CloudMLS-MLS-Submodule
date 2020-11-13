@@ -241,6 +241,18 @@ export function decodeVector(decoder: Decoder, lengthBytes: number, numElems?: n
     }
 }
 
+export function decodeOptional(decoder: Decoder): Decoder {
+    return (buffer: Uint8Array, offset: number): [any, number] => {
+        // eslint-disable-next-line comma-dangle, array-bracket-spacing
+        const [present, ]: [number, number] = decodeUint8(buffer, offset);
+        if (present) {
+            return decoder(buffer, offset + 1);
+        } else {
+            return [undefined, offset + 1];
+        }
+    }
+}
+
 export function decode(
     decoders: Decoder[], buffer: Uint8Array, offset = 0,
 ): [any[], number] {
