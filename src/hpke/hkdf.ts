@@ -41,7 +41,7 @@ function makeHKDF(name: string, size: number, id: number): KDF {
             }
             const ret = new Uint8Array(length);
             const key = await subtle.importKey(
-                "raw", info, {name: "HMAC", hash: name, length: info.byteLength * 8},
+                "raw", prk, {name: "HMAC", hash: name, length: info.byteLength * 8},
                 false, ["sign"],
             );
             let chunk: Uint8Array = new Uint8Array(0);
