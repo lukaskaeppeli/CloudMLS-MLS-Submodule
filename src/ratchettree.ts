@@ -147,21 +147,23 @@ export class RatchetTreeView {
                 undefined, // FIXME:
             ));
 
+            const encryptedPathSecret: HPKECiphertext[] = [];
             // encrypt the path secret for users under the copath
             for (const nodeData of resolutionOf(copath[i])) {
                 // FIXME: "For each UpdatePathNode, the resolution of the
                 // corresponding copath node MUST be filtered by removing all
                 // new leaf nodes added as part of this MLS Commit message."
-                updatePathNodes.push(new UpdatePathNode(
-                    await currNodePub.serialize(),
-                    await HPKECiphertext.encrypt(
-                        this.hpke,
-                        nodeData.publicKey,
-                        EMPTY_BYTE_ARRAY, // FIXME: group context,
-                        currPathSecret,
-                    ),
+                encryptedPathSecret.push(await HPKECiphertext.encrypt(
+                    this.hpke,
+                    nodeData.publicKey,
+                    EMPTY_BYTE_ARRAY, // FIXME: group context,
+                    currPathSecret,
                 ));
             }
+            updatePathNodes.push(new UpdatePathNode(
+                await currNodePub.serialize(),
+                encryptedPathSecret,
+            ));
         }
 
         leafSecret.fill(0);
@@ -200,15 +202,18 @@ export class RatchetTreeView {
         let currPathSecret: Uint8Array;
         let i = 0;
         for (; i < updatePath.nodes.length; i++) {
-            // FIXME: group update path nodes by public key
             const updatePathNode = updatePath.nodes[i];
-            for (const key of privateKeys) {
-                // FIXME: is there a better way of doing this than trying to
-                // decrypt every ciphertext with every key?  In theory, we
-                // should know exactly which ciphertext was encrypted to which
-                // key.
+            // FIXME: is there a better way of doing this than trying to
+            // decrypt every ciphertext with every key?  In theory, we should
+            // know exactly which ciphertext was encrypted to which key.  We
+            // should also know which node will be encrypted for us.
+            const encrKeyPairs: [HPKECiphertext, KEMPrivateKey][] =
+                [].concat(...updatePathNode.encryptedPathSecret.map(
+                    encr => privateKeys.map(key => [encr, key] as [HPKECiphertext, KEMPrivateKey]),
+                ));
+            for (const [encryptedPathSecret, key] of encrKeyPairs) {
                 try {
-                    currPathSecret = await updatePathNode.encryptedPathSecret.decrypt(
+                    currPathSecret = await encryptedPathSecret.decrypt(
                         this.hpke, key,
                         EMPTY_BYTE_ARRAY, // FIXME: group context,
                     );
