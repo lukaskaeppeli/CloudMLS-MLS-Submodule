@@ -53,7 +53,7 @@ function makeHKDF(name: string, size: number, id: number): KDF {
                     ),
                 );
                 if (pos + size > length) {
-                    ret.set(chunk.subarray(0, length - pos));
+                    ret.set(chunk.subarray(0, length - pos), size * i);
                 } else {
                     ret.set(chunk, size * i);
                 }

@@ -134,7 +134,7 @@ export async function labeledExtract(
     ikm: Uint8Array,
 ): Promise<Uint8Array> {
     const labeledIkm = concatUint8Array([HPKE_IDENTIFIER, suiteId, label, ikm]);
-    return kdf.extract(labeledIkm, salt);
+    return kdf.extract(salt, labeledIkm);
 }
 
 // def LabeledExpand(prk, label, info, L):
