@@ -21,24 +21,35 @@ import {stringToUint8Array} from "./util";
 export const EMPTY_BYTE_ARRAY = new Uint8Array(0);
 
 // Uint8Array versions of strings
+export const AUTHENTICATION = stringToUint8Array("authentication");
 export const CANDIDATE = stringToUint8Array("candidate");
+export const CONFIRM = stringToUint8Array("confirm");
 export const DKP_PRK = stringToUint8Array("dkp_prk");
 export const EAE_PRK = stringToUint8Array("eae_prk");
+export const ENCRYPTION = stringToUint8Array("encryption");
+export const EPOCH = stringToUint8Array("epoch");
 export const EXP = stringToUint8Array("exp");
+export const EXPORTER = stringToUint8Array("exporter");
+export const EXTERNAL = stringToUint8Array("external");
 export const HPKE = stringToUint8Array("HPKE");
 export const INFO_HASH = stringToUint8Array("info_hash");
+export const INIT = stringToUint8Array("init");
 export const KEY = stringToUint8Array("key");
 export const MLS10 = stringToUint8Array("mls10 ");
+export const MEMBER = stringToUint8Array("member");
+export const MEMBERSHIP = stringToUint8Array("membership");
 export const NODE = stringToUint8Array("node");
 export const NONCE = stringToUint8Array("nonce");
 export const PATH = stringToUint8Array("path");
 export const PSK_HASH = stringToUint8Array("psk_hash");
 export const PSK_ID_HASH = stringToUint8Array("psk_id_hash");
+export const RESUMPTION = stringToUint8Array("resumption");
 export const SEC = stringToUint8Array("sec");
 export const SECRET = stringToUint8Array("secret");
+export const SENDER_DATA = stringToUint8Array("sender data");
 export const SHARED_SECRET = stringToUint8Array("shared_secret");
 export const SK = stringToUint8Array("sk");
-
+export const WELCOME = stringToUint8Array("welcome");
 
 // uint16
 export enum CipherSuite {

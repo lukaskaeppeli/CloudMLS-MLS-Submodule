@@ -90,13 +90,15 @@ describe("Ratchet Tree", () => {
             ]),
         );
 
-        const [updatePath, ratchetTreeView1v1] = await ratchetTreeView1v0.update(makeKeyPackage);
+        const [updatePath, commitSecret1, ratchetTreeView1v1] = await ratchetTreeView1v0.update(makeKeyPackage);
         expect(ratchetTreeView1v1.tree.root.data.privateKey).not.toEqual(hpkePrivKey3);
 
-        const ratchetTreeView0v1 = await ratchetTreeView0v0.applyUpdatePath(1, updatePath);
+        const [commitSecret0, ratchetTreeView0v1] = await ratchetTreeView0v0.applyUpdatePath(1, updatePath);
+        expect(commitSecret0).toEqual(commitSecret1);
         expect(ratchetTreeView0v1.tree.root.data.privateKey).toEqual(ratchetTreeView1v1.tree.root.data.privateKey);
 
-        const ratchetTreeView2v1 = await ratchetTreeView2v0.applyUpdatePath(1, updatePath);
+        const [commitSecret2, ratchetTreeView2v1] = await ratchetTreeView2v0.applyUpdatePath(1, updatePath);
+        expect(commitSecret2).toEqual(commitSecret1);
         expect(ratchetTreeView2v1.tree.root.data.privateKey).toEqual(ratchetTreeView1v1.tree.root.data.privateKey);
     });
 

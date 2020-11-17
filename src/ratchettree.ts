@@ -111,7 +111,8 @@ export class RatchetTreeView {
         }
     }
 
-    async update(makeKeyPackage: MakeKeyPackage): Promise<[UpdatePath, RatchetTreeView]> {
+    async update(makeKeyPackage: MakeKeyPackage):
+    Promise<[UpdatePath, Uint8Array, RatchetTreeView]> {
         // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#ratchet-tree-evolution
         const copath = [...this.tree.coPathOfLeafNum(this.leafNum)].reverse();
         const n = copath.length;
@@ -174,10 +175,15 @@ export class RatchetTreeView {
         // update our tree
         const newTree = this.tree.replacePathToLeaf(this.leafNum, newPath.reverse());
 
-        return [updatePath, new RatchetTreeView(this.hpke, this.leafNum, newTree)];
+        return [
+            updatePath,
+            await deriveSecret(this.hpke, currPathSecret, PATH),
+            new RatchetTreeView(this.hpke, this.leafNum, newTree),
+        ];
     }
 
-    async applyUpdatePath(fromNode: number, updatePath: UpdatePath): Promise<RatchetTreeView> {
+    async applyUpdatePath(fromNode: number, updatePath: UpdatePath):
+    Promise<[Uint8Array, RatchetTreeView]> {
         // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#synchronizing-views-of-the-tree
 
         const privateKeys =
@@ -258,13 +264,16 @@ export class RatchetTreeView {
 
         const newTree = this.tree.replacePathToLeaf(fromNode, newPath.reverse());
 
-        return new RatchetTreeView(
-            this.hpke,
-            this.leafNum,
-            newTree,
-            this.idToLeafNum,
-            this.emptyLeaves,
-        );
+        return [
+            currPathSecret,
+            new RatchetTreeView(
+                this.hpke,
+                this.leafNum,
+                newTree,
+                this.idToLeafNum,
+                this.emptyLeaves,
+            ),
+        ];
     }
 
     async applyProposals(proposals: Proposal[]): Promise<RatchetTreeView> {
