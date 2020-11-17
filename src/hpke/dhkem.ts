@@ -26,4 +26,4 @@ import {x25519} from "./ecdh-x";
 export const p256HkdfSha256: KEM = makeDHKEM(p256, hkdfSha256, 0x0010);
 export const p384HkdfSha384: KEM = makeDHKEM(p384, hkdfSha384, 0x0011);
 export const p521HkdfSha512: KEM = makeDHKEM(p521, hkdfSha512, 0x0012);
-export const x25519HkdfSha256: KEM = makeDHKEM(x25519, hkdfSha512, 0x0020);
+export const x25519HkdfSha256: KEM = makeDHKEM(x25519, hkdfSha256, 0x0020);
