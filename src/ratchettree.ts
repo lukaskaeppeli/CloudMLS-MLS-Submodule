@@ -209,7 +209,7 @@ export class RatchetTreeView {
             // should also know which node will be encrypted for us.
             const encrKeyPairs: [HPKECiphertext, KEMPrivateKey][] =
                 [].concat(...updatePathNode.encryptedPathSecret.map(
-                    encr => privateKeys.map(key => [encr, key] as [HPKECiphertext, KEMPrivateKey]),
+                    encr => privateKeys.map(key => [encr, key]),
                 ));
             for (const [encryptedPathSecret, key] of encrKeyPairs) {
                 try {
