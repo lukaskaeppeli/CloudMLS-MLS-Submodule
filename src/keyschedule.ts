@@ -21,6 +21,7 @@ limitations under the License.
 
 import {concatUint8Array} from "./util";
 import {
+    APPLICATION,
     AUTHENTICATION,
     CONFIRM,
     EMPTY_BYTE_ARRAY,
@@ -28,16 +29,22 @@ import {
     EPOCH,
     EXPORTER,
     EXTERNAL,
+    HANDSHAKE,
     INIT,
+    KEY,
     MEMBER,
     MEMBERSHIP,
     MLS10,
+    NONCE,
     RESUMPTION,
+    SECRET,
     SENDER_DATA,
+    TREE,
     WELCOME,
 } from "./constants";
 import {HPKE} from "./hpke/base";
 import * as tlspl from "./tlspl";
+import {left, right, directPath, root} from "./treemath";
 
 export async function expandWithLabel(
     hpke: HPKE,
@@ -89,7 +96,7 @@ export async function generateSecrets(
 ): Promise<Secrets> {
     const joinerSecret = await hpke.kdf.extract(initSecret, commitSecret);
     if (psk === undefined) {
-        psk = EMPTY_BYTE_ARRAY; // FIXME: ???
+        psk = EMPTY_BYTE_ARRAY;
     }
     const memberIkm = await deriveSecret(hpke, joinerSecret, MEMBER);
     const memberSecret = await hpke.kdf.extract(memberIkm, psk);
@@ -138,4 +145,124 @@ export async function generateSecrets(
         resumptionSecret,
         initSecret: nextInitSecret,
     };
+}
+
+// https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#secret-tree-secret-tree
+
+async function deriveTreeSecret(
+    hpke: HPKE,
+    secret: Uint8Array,
+    label: Uint8Array,
+    node: number,
+    generation: number,
+    length: number,
+): Promise<Uint8Array> {
+    return expandWithLabel(
+        hpke,
+        secret,
+        label,
+        tlspl.encode([
+            tlspl.uint32(node),
+            tlspl.uint32(generation),
+        ]),
+        length,
+    )
+}
+
+export class SecretTree {
+    private keyTree: {[index: number]: Uint8Array};
+    constructor(
+        readonly hpke: HPKE,
+        encryptionSecret: Uint8Array,
+        readonly treeSize: number,
+    ) {
+        this.keyTree = {[root(treeSize)]: encryptionSecret};
+    }
+    private async deriveChildSecrets(nodeNum: number): Promise<void> {
+        const treeNodeSecret = this.keyTree[nodeNum];
+        this.keyTree[nodeNum].fill(0);
+        delete this.keyTree[nodeNum];
+        const [leftChildNum, rightChildNum] =
+            [left(nodeNum), right(nodeNum, this.treeSize)];
+        const [leftSecret, rightSecret] = await Promise.all([
+            deriveTreeSecret(
+                this.hpke, treeNodeSecret, TREE,
+                leftChildNum, 0, this.hpke.kdf.extractLength,
+            ),
+            deriveTreeSecret(
+                this.hpke, treeNodeSecret, TREE,
+                rightChildNum, 0, this.hpke.kdf.extractLength,
+            ),
+        ]);
+        this.keyTree[leftChildNum] = leftSecret;
+        this.keyTree[rightChildNum] = rightSecret;
+    }
+    async getRatchetsForLeaf(leafNum: number): Promise<[HashRatchet, HashRatchet]> {
+        const nodeNum = leafNum * 2;
+        const path = directPath(nodeNum, this.treeSize);
+        const nodesToDerive = [];
+        for (const node of path) {
+            nodesToDerive.push(node);
+            if (node in this.keyTree) {
+                break;
+            }
+        }
+        if (!(nodeNum in this.keyTree)) {
+            if (!(nodesToDerive[nodesToDerive.length - 1] in this.keyTree)) {
+                throw new Error("Ratchet for leaf has already been derived");
+            }
+            while (nodesToDerive.length) {
+                const node = nodesToDerive.pop();
+                await this.deriveChildSecrets(node);
+            }
+        }
+        const leafSecret = this.keyTree[nodeNum];
+        delete this.keyTree[nodeNum];
+
+        const [handshakeSecret, applicationSecret] = await Promise.all([
+            deriveTreeSecret(
+                this.hpke, leafSecret, HANDSHAKE,
+                nodeNum, 0, this.hpke.kdf.extractLength,
+            ),
+            deriveTreeSecret(
+                this.hpke, leafSecret, APPLICATION,
+                nodeNum, 0, this.hpke.kdf.extractLength,
+            ),
+        ]);
+        leafSecret.fill(0);
+
+        return [
+            new HashRatchet(this.hpke, nodeNum, handshakeSecret),
+            new HashRatchet(this.hpke, nodeNum, applicationSecret),
+        ];
+    }
+}
+
+// https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#encryption-keys
+
+export class HashRatchet {
+    private generation;
+    constructor(readonly hpke, readonly nodeNum, private secret: Uint8Array) {
+        this.generation = 0;
+    }
+    async advance(): Promise<[Uint8Array, Uint8Array]> {
+        const [nonce, key, nextSecret] = await Promise.all([
+            deriveTreeSecret(
+                this.hpke, this.secret, NONCE,
+                this.nodeNum, this.generation, this.hpke.aead.nonceLength,
+            ),
+            deriveTreeSecret(
+                this.hpke, this.secret, KEY,
+                this.nodeNum, this.generation, this.hpke.aead.keyLength,
+            ),
+            deriveTreeSecret(
+                this.hpke, this.secret, SECRET,
+                this.nodeNum, this.generation, this.hpke.kdf.extractLength,
+            ),
+        ]);
+        this.secret.fill(0);
+        this.generation++;
+        this.secret = nextSecret;
+        return [nonce, key];
+    }
 }

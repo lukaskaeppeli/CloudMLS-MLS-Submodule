@@ -21,6 +21,7 @@ import {stringToUint8Array} from "./util";
 export const EMPTY_BYTE_ARRAY = new Uint8Array(0);
 
 // Uint8Array versions of strings
+export const APPLICATION = stringToUint8Array("application");
 export const AUTHENTICATION = stringToUint8Array("authentication");
 export const CANDIDATE = stringToUint8Array("candidate");
 export const CONFIRM = stringToUint8Array("confirm");
@@ -31,6 +32,7 @@ export const EPOCH = stringToUint8Array("epoch");
 export const EXP = stringToUint8Array("exp");
 export const EXPORTER = stringToUint8Array("exporter");
 export const EXTERNAL = stringToUint8Array("external");
+export const HANDSHAKE = stringToUint8Array("handshake");
 export const HPKE = stringToUint8Array("HPKE");
 export const INFO_HASH = stringToUint8Array("info_hash");
 export const INIT = stringToUint8Array("init");
@@ -49,6 +51,7 @@ export const SECRET = stringToUint8Array("secret");
 export const SENDER_DATA = stringToUint8Array("sender data");
 export const SHARED_SECRET = stringToUint8Array("shared_secret");
 export const SK = stringToUint8Array("sk");
+export const TREE = stringToUint8Array("tree");
 export const WELCOME = stringToUint8Array("welcome");
 
 // uint16
