@@ -242,10 +242,28 @@ export class SecretTree {
 
 export class HashRatchet {
     private generation;
+    private savedKeys: {[index: number]: [Uint8Array, Uint8Array]}
     constructor(readonly hpke, readonly nodeNum, private secret: Uint8Array) {
         this.generation = 0;
+        this.savedKeys = {};
     }
-    async advance(): Promise<[Uint8Array, Uint8Array]> {
+    async getKey(generation: number): Promise<[Uint8Array, Uint8Array]> {
+        if (generation < this.generation) {
+            if (generation in this.savedKeys) {
+                const key = this.savedKeys[generation];
+                delete this.savedKeys[generation];
+                return key;
+            } else {
+                throw new Error("Key was already fetched");
+            }
+        } else {
+            while (this.generation < generation) {
+                this.savedKeys[this.generation] = await this.advance();
+            }
+            return await this.advance();
+        }
+    }
+    private async advance(): Promise<[Uint8Array, Uint8Array]> {
         const [nonce, key, nextSecret] = await Promise.all([
             deriveTreeSecret(
                 this.hpke, this.secret, NONCE,

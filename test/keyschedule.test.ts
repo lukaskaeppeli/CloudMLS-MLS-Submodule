@@ -50,10 +50,10 @@ describe("secret tree", () => {
         const [handshake4, application4] = await secretTree.getRatchetsForLeaf(4);
         const [handshake2, application2] = await secretTree.getRatchetsForLeaf(2);
 
-        const [handshake0nonce0, handshake0key0] = await handshake0.advance();
-        const [handshake0nonce1, handshake0key1] = await handshake0.advance();
-        const [application0nonce0, application0key0] = await application0.advance();
-        const [application0nonce1, application0key1] = await application0.advance();
+        const [handshake0nonce0, handshake0key0] = await handshake0.getKey(0);
+        const [handshake0nonce1, handshake0key1] = await handshake0.getKey(1);
+        const [application0nonce0, application0key0] = await application0.getKey(0);
+        const [application0nonce1, application0key1] = await application0.getKey(1);
         expect(handshake0nonce0).not.toEqual(handshake0key0);
         expect(handshake0nonce0).not.toEqual(handshake0nonce1);
         expect(handshake0key0).not.toEqual(handshake0key1);
@@ -62,17 +62,17 @@ describe("secret tree", () => {
         expect(application0nonce0).not.toEqual(application0nonce1);
         expect(application0key0).not.toEqual(application0key1);
 
-        const [handshake1nonce0, handshake1key0] = await handshake1.advance();
+        const [handshake1nonce0, handshake1key0] = await handshake1.getKey(0);
         expect(handshake0nonce0).not.toEqual(handshake1nonce0);
         expect(handshake0key0).not.toEqual(handshake1key0);
 
-        const [handshake2nonce0, handshake2key0] = await handshake2.advance();
+        const [handshake2nonce0, handshake2key0] = await handshake2.getKey(0);
         expect(handshake0nonce0).not.toEqual(handshake2nonce0);
         expect(handshake0key0).not.toEqual(handshake2key0);
         expect(handshake1nonce0).not.toEqual(handshake2nonce0);
         expect(handshake1key0).not.toEqual(handshake2key0);
 
-        const [handshake3nonce0, handshake3key0] = await handshake3.advance();
+        const [handshake3nonce0, handshake3key0] = await handshake3.getKey(0);
         expect(handshake0nonce0).not.toEqual(handshake3nonce0);
         expect(handshake0key0).not.toEqual(handshake3key0);
         expect(handshake1nonce0).not.toEqual(handshake3nonce0);
@@ -80,7 +80,7 @@ describe("secret tree", () => {
         expect(handshake2nonce0).not.toEqual(handshake3nonce0);
         expect(handshake2key0).not.toEqual(handshake3key0);
 
-        const [handshake4nonce0, handshake4key0] = await handshake4.advance();
+        const [handshake4nonce0, handshake4key0] = await handshake4.getKey(0);
         expect(handshake0nonce0).not.toEqual(handshake4nonce0);
         expect(handshake0key0).not.toEqual(handshake4key0);
         expect(handshake1nonce0).not.toEqual(handshake4nonce0);
@@ -89,5 +89,46 @@ describe("secret tree", () => {
         expect(handshake2key0).not.toEqual(handshake4key0);
         expect(handshake3nonce0).not.toEqual(handshake4nonce0);
         expect(handshake3key0).not.toEqual(handshake4key0);
+    });
+    it("should handle out-of-order messages", async () => {
+        const hashRatchet1 = new HashRatchet(
+            x25519HkdfSha256Aes128Gcm, 0,
+            new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength),
+        );
+        const hashRatchet2 = new HashRatchet(
+            x25519HkdfSha256Aes128Gcm, 0,
+            new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength),
+        );
+
+        const key1g0 = await hashRatchet1.getKey(0);
+        const key1g1 = await hashRatchet1.getKey(1);
+        const key1g2 = await hashRatchet1.getKey(2);
+        const key1g3 = await hashRatchet1.getKey(3);
+        const key1g4 = await hashRatchet1.getKey(4);
+
+        // we should get the same results no matter what order it's derived in
+        const key2g3 = await hashRatchet2.getKey(3);
+        const key2g1 = await hashRatchet2.getKey(1);
+        const key2g0 = await hashRatchet2.getKey(0);
+        const key2g4 = await hashRatchet2.getKey(4);
+        const key2g2 = await hashRatchet2.getKey(2);
+
+        expect(key1g0).toEqual(key2g0);
+        expect(key1g1).toEqual(key2g1);
+        expect(key1g2).toEqual(key2g2);
+        expect(key1g3).toEqual(key2g3);
+        expect(key1g4).toEqual(key2g4);
+
+        // trying to re-derive any of them should thrown an error
+        await expect(hashRatchet1.getKey(0)).rejects.toThrow();
+        await expect(hashRatchet1.getKey(1)).rejects.toThrow();
+        await expect(hashRatchet1.getKey(2)).rejects.toThrow();
+        await expect(hashRatchet1.getKey(3)).rejects.toThrow();
+        await expect(hashRatchet1.getKey(4)).rejects.toThrow();
+        await expect(hashRatchet2.getKey(0)).rejects.toThrow();
+        await expect(hashRatchet2.getKey(1)).rejects.toThrow();
+        await expect(hashRatchet2.getKey(2)).rejects.toThrow();
+        await expect(hashRatchet2.getKey(3)).rejects.toThrow();
+        await expect(hashRatchet2.getKey(4)).rejects.toThrow();
     });
 });
