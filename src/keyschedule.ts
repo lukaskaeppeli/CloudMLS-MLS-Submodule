@@ -95,6 +95,18 @@ export async function generateSecrets(
     psk?: Uint8Array,
 ): Promise<Secrets> {
     const joinerSecret = await hpke.kdf.extract(initSecret, commitSecret);
+    return await generateSecretsFromJoinerSecret(
+        hpke, joinerSecret, commitSecret, groupContext, psk,
+    );
+}
+
+export async function generateSecretsFromJoinerSecret(
+    hpke: HPKE,
+    joinerSecret: Uint8Array,
+    commitSecret: Uint8Array,
+    groupContext: Uint8Array,
+    psk?: Uint8Array,
+): Promise<Secrets> {
     if (psk === undefined) {
         psk = EMPTY_BYTE_ARRAY;
     }
