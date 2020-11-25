@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import {x25519HkdfSha256Aes128Gcm} from "../src/hpke";
-import {SecretTree, HashRatchet} from "../src/keyschedule";
+import {SecretTree, HashRatchet, LenientHashRatchet} from "../src/keyschedule";
 
 describe("secret tree", () => {
     it("should derive all leaf ratchets", async () => {
@@ -90,14 +90,18 @@ describe("secret tree", () => {
         expect(handshake3nonce0).not.toEqual(handshake4nonce0);
         expect(handshake3key0).not.toEqual(handshake4key0);
     });
+});
+
+describe("hash ratchet", () => {
     it("should handle out-of-order messages", async () => {
+        // we need to copy the secret because it will get clobbered
+        const secret = new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength);
+        window.crypto.getRandomValues(secret);
         const hashRatchet1 = new HashRatchet(
-            x25519HkdfSha256Aes128Gcm, 0,
-            new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength),
+            x25519HkdfSha256Aes128Gcm, 0, new Uint8Array(secret),
         );
         const hashRatchet2 = new HashRatchet(
-            x25519HkdfSha256Aes128Gcm, 0,
-            new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength),
+            x25519HkdfSha256Aes128Gcm, 0, new Uint8Array(secret),
         );
 
         const key1g0 = await hashRatchet1.getKey(0);
@@ -130,5 +134,54 @@ describe("secret tree", () => {
         await expect(hashRatchet2.getKey(2)).rejects.toThrow();
         await expect(hashRatchet2.getKey(3)).rejects.toThrow();
         await expect(hashRatchet2.getKey(4)).rejects.toThrow();
+    });
+});
+
+describe("lenient hash ratchet", () => {
+    it("should generate the same values as hash ratchet", async () => {
+        const secret = new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength);
+        window.crypto.getRandomValues(secret);
+        const hashRatchet1 = new HashRatchet(
+            x25519HkdfSha256Aes128Gcm, 0, new Uint8Array(secret),
+        );
+        const hashRatchet2 = new LenientHashRatchet(
+            x25519HkdfSha256Aes128Gcm, 0, new Uint8Array(secret),
+        );
+
+        const key1g0 = await hashRatchet1.getKey(0);
+        const key1g1 = await hashRatchet1.getKey(1);
+        const key1g2 = await hashRatchet1.getKey(2);
+        const key1g3 = await hashRatchet1.getKey(3);
+        const key1g4 = await hashRatchet1.getKey(4);
+
+        const key2g3 = await hashRatchet2.getKey(3);
+        const key2g1 = await hashRatchet2.getKey(1);
+        const key2g0 = await hashRatchet2.getKey(0);
+        const key2g4 = await hashRatchet2.getKey(4);
+        const key2g2 = await hashRatchet2.getKey(2);
+
+        expect(key1g0).toEqual(key2g0);
+        expect(key1g1).toEqual(key2g1);
+        expect(key1g2).toEqual(key2g2);
+        expect(key1g3).toEqual(key2g3);
+        expect(key1g4).toEqual(key2g4);
+    });
+    it("should allow re-deriving keys", async () => {
+        const secret = new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength);
+        window.crypto.getRandomValues(secret);
+        const hashRatchet = new LenientHashRatchet(
+            x25519HkdfSha256Aes128Gcm, 0, secret,
+        );
+        const key1g0 = await hashRatchet.getKey(0);
+        const key1g1 = await hashRatchet.getKey(1);
+        const key1g2 = await hashRatchet.getKey(2);
+        const key1g3 = await hashRatchet.getKey(3);
+        const key1g4 = await hashRatchet.getKey(4);
+
+        expect(await hashRatchet.getKey(3)).toEqual(key1g3);
+        expect(await hashRatchet.getKey(1)).toEqual(key1g1);
+        expect(await hashRatchet.getKey(0)).toEqual(key1g0);
+        expect(await hashRatchet.getKey(4)).toEqual(key1g4);
+        expect(await hashRatchet.getKey(2)).toEqual(key1g2);
     });
 });

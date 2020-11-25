@@ -253,9 +253,9 @@ export class SecretTree {
 // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#encryption-keys
 
 export class HashRatchet {
-    private generation;
+    public generation;
     private savedKeys: {[index: number]: [Uint8Array, Uint8Array]}
-    constructor(readonly hpke, readonly nodeNum, private secret: Uint8Array) {
+    constructor(readonly hpke: HPKE, readonly nodeNum: number, private secret: Uint8Array) {
         this.generation = 0;
         this.savedKeys = {};
     }
@@ -294,5 +294,44 @@ export class HashRatchet {
         this.generation++;
         this.secret = nextSecret;
         return [nonce, key];
+    }
+}
+
+/** Like HashRatchet, but allows you to re-derive keys that were already
+ * fetched.  Using this function will void your warranty.
+ */
+export class LenientHashRatchet extends HashRatchet {
+    private origSecret: Uint8Array;
+    constructor(hpke: HPKE, nodeNum: number, secret: Uint8Array) {
+        super(hpke, nodeNum, secret);
+        this.origSecret = new Uint8Array(secret);
+    }
+    async getKey(generation: number): Promise<[Uint8Array, Uint8Array]> {
+        try {
+            return await super.getKey(generation);
+        } catch {
+            let secret = this.origSecret;
+            for (let i = 0; i < generation; i++) {
+                const newSecret = await deriveTreeSecret(
+                    this.hpke, secret, SECRET,
+                    this.nodeNum, i, this.hpke.kdf.extractLength,
+                );
+                if (secret !== this.origSecret) {
+                    secret.fill(0);
+                }
+                secret = newSecret;
+            }
+            const [nonce, key] = await Promise.all([
+                deriveTreeSecret(
+                    this.hpke, secret, NONCE,
+                    this.nodeNum, generation, this.hpke.aead.nonceLength,
+                ),
+                deriveTreeSecret(
+                    this.hpke, secret, KEY,
+                    this.nodeNum, generation, this.hpke.aead.keyLength,
+                ),
+            ]);
+            return [nonce, key];
+        }
     }
 }
