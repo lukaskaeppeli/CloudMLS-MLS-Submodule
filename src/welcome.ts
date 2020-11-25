@@ -198,7 +198,7 @@ export class Welcome {
 
     static async create(
         hpke: HPKE,
-        hashFn: Hash,
+        hash: Hash,
         cipherSuite: CipherSuite,
         joinerSecret: Uint8Array,
         groupInfo: GroupInfo,
@@ -207,13 +207,13 @@ export class Welcome {
         const secrets: EncryptedGroupSecrets[] = await Promise.all(
             recipients.map(async ({keyPackage, pathSecret}) => {
                 const encodedKeyPackage = tlspl.encode([keyPackage.encoder]);
-                const hash = await hashFn(encodedKeyPackage);
+                const kpHash = await hash.hash(encodedKeyPackage);
                 const groupSecrets = new GroupSecrets(joinerSecret, pathSecret);
                 const encryptedGroupSecrets = await HPKECiphertext.encrypt(
                     hpke, await keyPackage.getHpkeKey(),
                     EMPTY_BYTE_ARRAY, tlspl.encode([groupSecrets.encoder]),
                 );
-                return new EncryptedGroupSecrets(hash, encryptedGroupSecrets);
+                return new EncryptedGroupSecrets(kpHash, encryptedGroupSecrets);
             }),
         );
 
@@ -242,12 +242,12 @@ export class Welcome {
     }
 
     async decrypt(
-        hpke: HPKE, hashFn: Hash, keyPackage: KeyPackage, privKey: KEMPrivateKey,
+        hpke: HPKE, hash: Hash, keyPackage: KeyPackage, privKey: KEMPrivateKey,
     ): Promise<[GroupSecrets, GroupInfo]> {
         const encodedKeyPackage = tlspl.encode([keyPackage.encoder]);
-        const hash = await hashFn(encodedKeyPackage);
+        const kpHash = await hash.hash(encodedKeyPackage);
         const secrets = this.secrets.find((secret) => {
-            return eqUint8Array(secret.keyPackageHash, hash);
+            return eqUint8Array(secret.keyPackageHash, kpHash);
         });
         if (secrets === undefined) {
             throw new Error("Not encrypted for our key package");

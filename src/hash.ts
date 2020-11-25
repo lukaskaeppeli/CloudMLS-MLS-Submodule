@@ -14,17 +14,39 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-/** Hash functions
- */
-
-export type Hash = (data: Uint8Array) => Promise<Uint8Array>;
-
 const subtle = window.crypto.subtle;
 
-export async function sha256(data: Uint8Array): Promise<Uint8Array> {
-    return new Uint8Array(await subtle.digest("SHA-256", data));
+/** Hash functions.  Also define MAC functions since MLS uses hash-based MACs
+ */
+
+export interface Hash {
+    hash: (data: Uint8Array) => Promise<Uint8Array>;
+    mac: (key: Uint8Array, data: Uint8Array) => Promise<Uint8Array>;
+    verifyMac: (key: Uint8Array, data: Uint8Array, mac: Uint8Array) => Promise<boolean>;
 }
 
-export async function sha512(data: Uint8Array): Promise<Uint8Array> {
-    return new Uint8Array(await subtle.digest("SHA-512", data));
+function makeHash(name: string): Hash {
+    return {
+        async hash(data: Uint8Array): Promise<Uint8Array> {
+            return new Uint8Array(await subtle.digest(name, data));
+        },
+        async mac(key: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
+            const cryptoKey = subtle.importKey(
+                "raw", key, {name: "HMAC", hash: name, length: key.byteLength * 8},
+                false, ["sign"],
+            );
+            return new Uint8Array(await subtle.sign("HMAC", cryptoKey, data));
+        },
+        async verifyMac(key: Uint8Array, data: Uint8Array, mac: Uint8Array): Promise<boolean> {
+            const cryptoKey = subtle.importKey(
+                "raw", key, {name: "HMAC", hash: name, length: key.byteLength * 8},
+                false, ["verify"],
+            );
+            return await subtle.verify("HMAC", key, mac, data);
+        },
+    }
 }
+
+export const sha256: Hash = makeHash("SHA-256");
+
+export const sha512: Hash = makeHash("SHA-512");
