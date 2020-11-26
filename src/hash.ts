@@ -31,18 +31,18 @@ function makeHash(name: string): Hash {
             return new Uint8Array(await subtle.digest(name, data));
         },
         async mac(key: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
-            const cryptoKey = subtle.importKey(
+            const cryptoKey = await subtle.importKey(
                 "raw", key, {name: "HMAC", hash: name, length: key.byteLength * 8},
                 false, ["sign"],
             );
             return new Uint8Array(await subtle.sign("HMAC", cryptoKey, data));
         },
         async verifyMac(key: Uint8Array, data: Uint8Array, mac: Uint8Array): Promise<boolean> {
-            const cryptoKey = subtle.importKey(
+            const cryptoKey = await subtle.importKey(
                 "raw", key, {name: "HMAC", hash: name, length: key.byteLength * 8},
                 false, ["verify"],
             );
-            return await subtle.verify("HMAC", key, mac, data);
+            return await subtle.verify("HMAC", cryptoKey, mac, data);
         },
     }
 }
