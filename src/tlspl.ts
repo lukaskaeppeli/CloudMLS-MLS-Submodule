@@ -18,6 +18,8 @@ limitations under the License.
  * https://tools.ietf.org/html/rfc8446#section-3
  */
 
+import {EMPTY_BYTE_ARRAY} from "./constants";
+
 export interface Encoder {
     readonly length: number;
     writeToBuffer: ((buffer: Uint8Array, offset: number) => void);
@@ -32,6 +34,8 @@ export class Static implements Encoder {
         buffer.set(this.buffer, offset);
     }
 }
+
+export const empty = new Static(EMPTY_BYTE_ARRAY);
 
 export function uint8(num: number): Encoder {
     return {

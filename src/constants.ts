@@ -116,6 +116,22 @@ export enum ProtocolVersion {
 }
 
 // uint8
+export enum ContentType {
+    Reserved = 0,
+    Application = 1,
+    Proposal = 2,
+    Commit = 3,
+}
+
+// uint8
+export enum SenderType {
+    Reserved = 0,
+    Member = 1,
+    Preconfigured = 2,
+    NewMember = 3,
+}
+
+// uint8
 export enum ProposalType {
     Reserved =0,
     Add = 1,

@@ -17,11 +17,12 @@ limitations under the License.
 import {EMPTY_BYTE_ARRAY, NODE, PATH, ProposalType} from "./constants";
 import {eqUint8Array} from "./util";
 import {Leaf, Node, Tree} from "./lbbtree";
-import {KeyPackage} from "./keypackage";
+import {Extension, KeyPackage} from "./keypackage";
 import {KEMPrivateKey, KEMPublicKey, HPKE} from "./hpke/base";
 import {deriveSecret} from "./keyschedule";
 import {Credential} from "./credential";
 import {HPKECiphertext, UpdatePathNode, UpdatePath, Add, Update, Remove, Proposal} from "./message";
+import * as tlspl from "./tlspl";
 
 /** The ratchet tree allows group members to efficiently update the group secrets.
  */
@@ -415,3 +416,46 @@ export class RatchetTreeView {
         );
     }
 }
+
+// https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#group-state
+
+export class GroupContext {
+    constructor(
+        readonly groupId: Uint8Array,
+        readonly epoch: number,
+        readonly treeHash: Uint8Array,
+        readonly confirmedTranscriptHash: Uint8Array,
+        readonly extensions: Extension[],
+    ) {}
+
+    static decode(buffer: Uint8Array, offset: number): [GroupContext, number] {
+        const [
+            [groupId, epoch, treeHash, confirmedTranscriptHash, extensions],
+            offset1,
+        ] = tlspl.decode(
+            [
+                tlspl.decodeVariableOpaque(1),
+                tlspl.decodeUint64,
+                tlspl.decodeVariableOpaque(1),
+                tlspl.decodeVariableOpaque(1),
+                tlspl.decodeVector(Extension.decode, 4),
+            ],
+            buffer, offset,
+        );
+        return [
+            new GroupContext(groupId, epoch, treeHash, confirmedTranscriptHash, extensions),
+            offset1,
+        ]
+    }
+    get encoder(): tlspl.Encoder {
+        return tlspl.struct([
+            tlspl.variableOpaque(this.groupId, 1),
+            tlspl.uint64(this.epoch),
+            tlspl.variableOpaque(this.treeHash, 1),
+            tlspl.variableOpaque(this.confirmedTranscriptHash, 1),
+            tlspl.vector(this.extensions.map(x => x.encoder), 4),
+        ]);
+    }
+}
+
+// FIXME: add function to calculate confirmed transcript hash
