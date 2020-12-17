@@ -242,18 +242,30 @@ export class Welcome {
     }
 
     async decrypt(
-        hpke: HPKE, hash: Hash, keyPackage: KeyPackage, privKey: KEMPrivateKey,
-    ): Promise<[GroupSecrets, GroupInfo]> {
-        const encodedKeyPackage = tlspl.encode([keyPackage.encoder]);
-        const kpHash = await hash.hash(encodedKeyPackage);
+        hpke: HPKE, hash: Hash, keyPackages: Record<string, [KeyPackage, KEMPrivateKey]>,
+    ): Promise<[GroupSecrets, GroupInfo, string]> {
+        const kpHashes: [string, Uint8Array][] = await Promise.all(
+            // eslint-disable-next-line comma-dangle, array-bracket-spacing
+            Object.entries(keyPackages).map(async ([id, [keyPackage, ]]): Promise<[string, Uint8Array]> => {
+                const encodedKeyPackage = tlspl.encode([keyPackage.encoder]);
+                return [id, await hash.hash(encodedKeyPackage)];
+            }),
+        );
+        let keyId;
         const secrets = this.secrets.find((secret) => {
-            return eqUint8Array(secret.keyPackageHash, kpHash);
+            for (const [id, kpHash] of kpHashes) {
+                if (eqUint8Array(secret.keyPackageHash, kpHash)) {
+                    keyId = id;
+                    return true;
+                }
+            }
+            return false;
         });
         if (secrets === undefined) {
             throw new Error("Not encrypted for our key package");
         }
         const encodedGroupSecrets = await secrets.encryptedGroupSecrets.decrypt(
-            hpke, privKey, EMPTY_BYTE_ARRAY,
+            hpke, keyPackages[keyId][1], EMPTY_BYTE_ARRAY,
         );
         // eslint-disable-next-line comma-dangle, array-bracket-spacing
         const [groupSecrets, ] = GroupSecrets.decode(encodedGroupSecrets, 0);
@@ -266,6 +278,6 @@ export class Welcome {
         // eslint-disable-next-line comma-dangle, array-bracket-spacing
         const [groupInfo, ] = GroupInfo.decode(encodedGroupInfo, 0);
 
-        return [groupSecrets, groupInfo];
+        return [groupSecrets, groupInfo, keyId];
     }
 }

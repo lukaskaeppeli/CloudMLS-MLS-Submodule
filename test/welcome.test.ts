@@ -65,10 +65,11 @@ describe("welcome", () => {
             [{keyPackage, pathSecret: new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength)}],
         );
 
-        const [receivedGroupSecrets, receivedGroupInfo] = await welcome.decrypt(
-            x25519HkdfSha256Aes128Gcm, sha256, keyPackage, hpkePrivKey,
+        const [receivedGroupSecrets, receivedGroupInfo, keyId] = await welcome.decrypt(
+            x25519HkdfSha256Aes128Gcm, sha256, {"key": [keyPackage, hpkePrivKey]},
         );
         expect(receivedGroupInfo).toEqual(groupInfo);
+        expect(keyId).toEqual("key");
         expect(await receivedGroupInfo.checkSignature(senderPubKey)).toBe(true);
         expect(receivedGroupSecrets.joinerSecret).toEqual(new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength));
         expect(receivedGroupSecrets.pathSecret).toEqual(new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength));
