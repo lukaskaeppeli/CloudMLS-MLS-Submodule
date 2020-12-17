@@ -42,6 +42,12 @@ export abstract class Extension {
                 const [extension, ] = Capabilities.decode(extensionData);
                 return [extension, offset1];
             }
+            case ExtensionType.RatchetTree:
+            {
+                // eslint-disable-next-line comma-dangle, array-bracket-spacing
+                const [extension, ] = RatchetTree.decode(extensionData);
+                return [extension, offset1];
+            }
             default:
                 return [new UnknownExtension(extensionType, extensionData), offset1];
         }
@@ -145,7 +151,7 @@ export class RatchetTree extends Extension {
     get extensionData(): Uint8Array {
         return tlspl.encode([
             tlspl.vector(this.nodes.map((node) => {
-                if (node == undefined) {
+                if (node === undefined) {
                     return tlspl.uint8(0)
                 } else {
                     return tlspl.struct([
@@ -159,7 +165,7 @@ export class RatchetTree extends Extension {
             }), 4),
         ]);
     }
-    static decode(buffer: Uint8Array, offset): [RatchetTree, number] {
+    static decode(buffer: Uint8Array, offset = 0): [RatchetTree, number] {
         const [[nodes], offset1] = tlspl.decode(
             [tlspl.decodeVector(tlspl.decodeOptional(decodeRatchetTreeNode), 4)],
             buffer, offset,

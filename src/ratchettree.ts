@@ -151,7 +151,7 @@ export class RatchetTreeView {
                     throw new Error(`Expected a key package at position ${i}`);
                 }
                 keyPackages.push(node);
-                if (node.credential.credential.identity == ourIdentity) {
+                if (eqUint8Array(node.credential.credential.identity, ourIdentity)) {
                     leafNum = i / 2;
                 }
                 nodes[i] = new NodeData(

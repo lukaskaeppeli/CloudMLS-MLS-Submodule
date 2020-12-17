@@ -19,11 +19,12 @@ import {x25519HkdfSha256Aes128Gcm} from "../src/hpke";
 import {Ed25519} from "../src/signatures";
 import {BasicCredential, Credential} from "../src/credential";
 import {NodeData, RatchetTreeView} from "../src/ratchettree";
-import {KeyPackage} from "../src/keypackage";
+import {Extension, KeyPackage} from "../src/keypackage";
 import {Add, Update, Remove} from "../src/message";
 import {SignatureScheme, ProtocolVersion, CipherSuite, CredentialType} from "../src/constants";
 import {stringToUint8Array} from "../src/util";
 import {Tree} from "../src/lbbtree";
+import * as tlspl from "../src/tlspl";
 
 describe("Ratchet Tree", () => {
     it("should export and input", async () => {
@@ -101,8 +102,11 @@ describe("Ratchet Tree", () => {
         );
 
         const ratchetTreeExtension = await ratchetTreeView.toRatchetTreeExtension();
+        const encodedExtension = tlspl.encode([ratchetTreeExtension.encoder]);
+        // eslint-disable-next-line comma-dangle, array-bracket-spacing
+        const [[decodedExtension], ] = tlspl.decode([Extension.decode], encodedExtension);
         const decodedRatchetTreeView = await RatchetTreeView.fromRatchetTreeExtension(
-            x25519HkdfSha256Aes128Gcm, ratchetTreeExtension, keyPackage1,
+            x25519HkdfSha256Aes128Gcm, decodedExtension, keyPackage1,
             hpkePrivKey1,
         );
 
