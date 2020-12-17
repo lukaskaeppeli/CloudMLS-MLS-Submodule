@@ -148,3 +148,10 @@ export enum ProposalOrRefType {
     Proposal = 1,
     Reference = 2,
 }
+
+// uint8
+export enum NodeType {
+    Reserved = 0,
+    Leaf = 1,
+    Parent = 2,
+}

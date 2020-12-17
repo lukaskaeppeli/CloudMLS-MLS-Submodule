@@ -20,7 +20,7 @@ limitations under the License.
  * https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#key-packages
  */
 
-import {ExtensionType, ProtocolVersion, CipherSuite} from "./constants";
+import {ExtensionType, ProtocolVersion, CipherSuite, NodeType} from "./constants";
 import {Credential} from "./credential";
 import {SigningPrivateKey} from "./signatures";
 import {KEMPublicKey} from "./hpke/base";
@@ -78,6 +78,93 @@ export class Capabilities extends Extension {
             offset,
         )
         return [new Capabilities(versions, ciphersuites, extensions), offset1];
+    }
+}
+
+
+export class ParentNode {
+    private hpkeKey: KEMPublicKey;
+    constructor(
+        readonly publicKey: Uint8Array,
+        readonly unmergedLeaves: number[],
+        readonly parentHash: Uint8Array,
+    ) {}
+
+    async getHpkeKey(cipherSuite): Promise<KEMPublicKey> {
+        if (!this.hpkeKey) {
+            switch (cipherSuite) {
+                case CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519:
+                    this.hpkeKey = await x25519HkdfSha256.deserialize(this.publicKey);
+                    break;
+                default:
+                    throw new Error("Unknown cipher suite");
+            }
+        }
+        return this.hpkeKey;
+    }
+
+    static decode(buffer: Uint8Array, offset: number): [ParentNode, number] {
+        const [[publicKey, unmergedLeaves, parentHash], offset1] = tlspl.decode(
+            [
+                tlspl.decodeVariableOpaque(2),
+                tlspl.decodeVector(tlspl.decodeUint32, 4),
+                tlspl.decodeVariableOpaque(1),
+            ],
+            buffer, offset,
+        );
+        return [new ParentNode(publicKey, unmergedLeaves, parentHash), offset1];
+    }
+    get encoder(): tlspl.Encoder {
+        return tlspl.struct([
+            tlspl.variableOpaque(this.publicKey, 2),
+            tlspl.vector(this.unmergedLeaves.map(tlspl.uint32), 4),
+            tlspl.variableOpaque(this.parentHash, 1),
+        ]);
+    }
+}
+
+// https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#ratchet-tree-extension
+
+function decodeRatchetTreeNode(buffer: Uint8Array, offset: number)
+: [KeyPackage | ParentNode, number] {
+    const [[nodeType], offset1] = tlspl.decode([tlspl.decodeUint8], buffer, offset);
+    switch (nodeType) {
+        case NodeType.Leaf:
+            return KeyPackage.decode(buffer, offset1);
+        case NodeType.Parent:
+            return ParentNode.decode(buffer, offset1);
+        default:
+            throw new Error("Invalid node type");
+    }
+}
+
+export class RatchetTree extends Extension {
+    constructor(readonly nodes: Array<KeyPackage | ParentNode | undefined>) {
+        super(ExtensionType.RatchetTree);
+    }
+    get extensionData(): Uint8Array {
+        return tlspl.encode([
+            tlspl.vector(this.nodes.map((node) => {
+                if (node == undefined) {
+                    return tlspl.uint8(0)
+                } else {
+                    return tlspl.struct([
+                        tlspl.uint8(1),
+                        tlspl.uint8(
+                            node instanceof KeyPackage ? NodeType.Leaf : NodeType.Parent,
+                        ),
+                        node.encoder,
+                    ]);
+                }
+            }), 4),
+        ]);
+    }
+    static decode(buffer: Uint8Array, offset): [RatchetTree, number] {
+        const [[nodes], offset1] = tlspl.decode(
+            [tlspl.decodeVector(tlspl.decodeOptional(decodeRatchetTreeNode), 4)],
+            buffer, offset,
+        );
+        return [new RatchetTree(nodes), offset1];
     }
 }
 
