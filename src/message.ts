@@ -405,7 +405,7 @@ export class MLSCiphertext {
     }
     async decrypt(
         hpke: HPKE,
-        contentRatchet: HashRatchet,
+        getContentRatchet: (number) => Promise<HashRatchet> | HashRatchet,
         senderDataSecret: Uint8Array,
     ): Promise<MLSPlaintext> {
         // decrypt sender
@@ -443,7 +443,8 @@ export class MLSCiphertext {
             tlspl.uint8(this.contentType),
             tlspl.variableOpaque(this.authenticatedData, 4),
         ]);
-        const [contentNonce, contentKey] = await contentRatchet.getKey(generation);
+        const [contentNonce, contentKey] = await (await getContentRatchet(sender))
+            .getKey(generation);
         for (let i = 0; i < 4; i++) {
             contentNonce[i] ^= reuseGuard[i];
         }

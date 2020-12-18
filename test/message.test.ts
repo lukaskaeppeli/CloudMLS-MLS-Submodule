@@ -113,7 +113,10 @@ describe("MLS Ciphertext", () => {
         );
         const decryptedMlsPlaintext = await decodedMlsCiphertext.decrypt(
             x25519HkdfSha256Aes128Gcm,
-            receiverHashRatchet,
+            (x) => {
+                expect(x).toEqual(4);
+                return receiverHashRatchet;
+            },
             senderDataSecret,
         );
         expect(decryptedMlsPlaintext).toEqual(mlsPlaintext);
