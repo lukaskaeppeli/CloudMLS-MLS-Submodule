@@ -107,7 +107,7 @@ export class RatchetTreeView {
     }
 
     async toRatchetTreeExtension(): Promise<RatchetTree> {
-        const treeNodes: NodeData[] = [...this.tree];
+        const treeNodes: NodeData[] = [...this.tree]; // FIXME: O(n)
         const nodes: Array<KeyPackage | ParentNode | undefined> =
             await Promise.all(treeNodes.map(async (treeNode, i) => {
                 if (treeNode.publicKey) {
@@ -203,7 +203,7 @@ export class RatchetTreeView {
         // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#ratchet-tree-evolution
         const copath = [...this.tree.coPathOfLeafNum(this.leafNum)].reverse();
         const n = copath.length;
-        const keyPackages = Array.from(this.keyPackages);
+        const keyPackages = Array.from(this.keyPackages); // FIXME: O(n)
 
         // FIXME: is this the right length?
         const leafSecret = new Uint8Array(this.hpke.kem.privateKeyLength);
@@ -275,7 +275,7 @@ export class RatchetTreeView {
     Promise<[Uint8Array, RatchetTreeView]> {
         // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#synchronizing-views-of-the-tree
 
-        const keyPackages = Array.from(this.keyPackages);
+        const keyPackages = Array.from(this.keyPackages); // FIXME: O(n)
         const privateKeys =
             [...this.tree.pathToLeafNum(this.leafNum)]
                 .map(data => data.privateKey)
@@ -303,8 +303,7 @@ export class RatchetTreeView {
             const updatePathNode = updatePath.nodes[i];
             // FIXME: is there a better way of doing this than trying to
             // decrypt every ciphertext with every key?  In theory, we should
-            // know exactly which ciphertext was encrypted to which key.  We
-            // should also know which node will be encrypted for us.
+            // know exactly which node was encrypted to which key.
             const encrKeyPairs: [HPKECiphertext, KEMPrivateKey][] =
                 [].concat(...updatePathNode.encryptedPathSecret.map(
                     encr => privateKeys.map(key => [encr, key]),
@@ -396,8 +395,8 @@ export class RatchetTreeView {
         }
 
         if (removes.length) {
-            idToLeafNum = new Map(idToLeafNum);
-            emptyLeaves = Array.from(emptyLeaves);
+            idToLeafNum = new Map(idToLeafNum); // FIXME: O(n)
+            emptyLeaves = Array.from(emptyLeaves); // FIXME: O(n)
             for (const remove of removes) {
                 const path = [...tree.pathToLeafNum(remove.removed)];
 
@@ -451,10 +450,10 @@ export class RatchetTreeView {
 
         if (adds.length) {
             if (!removes.length) {
-                idToLeafNum = new Map(idToLeafNum);
-                emptyLeaves = Array.from(emptyLeaves);
+                idToLeafNum = new Map(idToLeafNum); // FIXME: O(n)
+                emptyLeaves = Array.from(emptyLeaves); // FIXME: O(n)
             }
-            emptyLeaves.sort();
+            emptyLeaves.sort(); // FIXME: O(n log n)
             for (const add of adds) {
                 const publicKey = await add.keyPackage.getHpkeKey();
                 const leafData = new NodeData(
@@ -502,7 +501,6 @@ export class RatchetTreeView {
                 }
             }
         }
-
 
         return new RatchetTreeView(
             this.hpke,
