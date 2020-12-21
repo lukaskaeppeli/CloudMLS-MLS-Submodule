@@ -23,18 +23,28 @@ import {concatUint8Array} from "../util";
 const subtle = window.crypto.subtle;
 
 function makeHKDF(name: string, size: number, blockSize: number, id: number): KDF {
+    let zeroKey; // a key consisting of blockSize 0's, which is the default salt
     return {
         async extract(salt: Uint8Array | undefined, ikm: Uint8Array): Promise<Uint8Array> {
+            let key;
             // importKey doesn't like a 0-byte length, so if it's size 0,
             // expand it to an all-zero array, because that's what HMAC will do
             // anyways
             if (salt === undefined || salt.length === 0) {
-                salt = new Uint8Array(blockSize);
+                if (!zeroKey) {
+                    salt = new Uint8Array(blockSize);
+                    zeroKey = await subtle.importKey(
+                        "raw", salt, {name: "HMAC", hash: name, length: salt.byteLength * 8},
+                        false, ["sign"],
+                    );
+                }
+                key = zeroKey;
+            } else {
+                key = await subtle.importKey(
+                    "raw", salt, {name: "HMAC", hash: name, length: salt.byteLength * 8},
+                    false, ["sign"],
+                );
             }
-            const key = await subtle.importKey(
-                "raw", salt, {name: "HMAC", hash: name, length: salt.byteLength * 8},
-                false, ["sign"],
-            );
             return new Uint8Array(await subtle.sign("HMAC", key, ikm));
         },
 
