@@ -179,6 +179,7 @@ class UnknownExtension extends Extension {
 
 export class KeyPackage {
     private hpkeKey: KEMPublicKey;
+    private hashCache: Uint8Array;
     constructor(
         readonly version: ProtocolVersion,
         readonly cipherSuite: CipherSuite,
@@ -219,6 +220,14 @@ export class KeyPackage {
             this.hpkeKey = await this.cipherSuite.hpke.kem.deserialize(this.hpkeInitKey);
         }
         return this.hpkeKey;
+    }
+
+    async hash(): Promise<Uint8Array> {
+        if (!this.hashCache) {
+            const encoded = tlspl.encode([this.encoder]);
+            this.hashCache = await this.cipherSuite.hash.hash(encoded);
+        }
+        return this.hashCache;
     }
 
     static decode(buffer: Uint8Array, offset: number): [KeyPackage, number] {

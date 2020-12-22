@@ -207,11 +207,10 @@ export class Welcome {
         recipients: {keyPackage: KeyPackage, pathSecret?: Uint8Array}[], // FIXME: psks
     ): Promise<Welcome> {
         const hpke = cipherSuite.hpke;
-        const hash = cipherSuite.hash;
+        // FIXME: make sure all recipients are using the same ciphersuite
         const secrets: EncryptedGroupSecrets[] = await Promise.all(
             recipients.map(async ({keyPackage, pathSecret}) => {
-                const encodedKeyPackage = tlspl.encode([keyPackage.encoder]);
-                const kpHash = await hash.hash(encodedKeyPackage);
+                const kpHash = await keyPackage.hash();
                 const groupSecrets = new GroupSecrets(joinerSecret, pathSecret);
                 const encryptedGroupSecrets = await HPKECiphertext.encrypt(
                     hpke, await keyPackage.getHpkeKey(),
@@ -250,12 +249,10 @@ export class Welcome {
         keyPackages: Record<string, [KeyPackage, KEMPrivateKey]>,
     ): Promise<[GroupSecrets, GroupInfo, string]> {
         const hpke = this.cipherSuite.hpke;
-        const hash = this.cipherSuite.hash;
         const kpHashes: [string, Uint8Array][] = await Promise.all(
             // eslint-disable-next-line comma-dangle, array-bracket-spacing
             Object.entries(keyPackages).map(async ([id, [keyPackage, ]]): Promise<[string, Uint8Array]> => {
-                const encodedKeyPackage = tlspl.encode([keyPackage.encoder]);
-                return [id, await hash.hash(encodedKeyPackage)];
+                return [id, await keyPackage.hash()];
             }),
         );
         let keyId;
