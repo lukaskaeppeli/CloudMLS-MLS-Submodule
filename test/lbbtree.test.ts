@@ -52,20 +52,34 @@ describe("Left-balanced binary tree", () => {
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
             16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
         ]);
-        expect([...tree.coPathOfLeafNum(0)]).toEqual([23, 11, 5, 2]);
-        expect([...tree.coPathOfLeafNum(1)]).toEqual([23, 11, 5, 0]);
-        expect([...tree.coPathOfLeafNum(2)]).toEqual([23, 11, 1, 6]);
-        expect([...tree.coPathOfLeafNum(3)]).toEqual([23, 11, 1, 4]);
-        expect([...tree.coPathOfLeafNum(4)]).toEqual([23, 3, 13, 10]);
-        expect([...tree.coPathOfLeafNum(5)]).toEqual([23, 3, 13, 8]);
-        expect([...tree.coPathOfLeafNum(6)]).toEqual([23, 3, 9, 14]);
-        expect([...tree.coPathOfLeafNum(7)]).toEqual([23, 3, 9, 12]);
-        expect([...tree.coPathOfLeafNum(8)]).toEqual([7, 25, 21, 18]);
-        expect([...tree.coPathOfLeafNum(9)]).toEqual([7, 25, 21, 16]);
-        expect([...tree.coPathOfLeafNum(10)]).toEqual([7, 25, 17, 22]);
-        expect([...tree.coPathOfLeafNum(11)]).toEqual([7, 25, 17, 20]);
-        expect([...tree.coPathOfLeafNum(12)]).toEqual([7, 19, 26]);
-        expect([...tree.coPathOfLeafNum(13)]).toEqual([7, 19, 24]);
+        expect([...tree.coPathOfLeafNum(0)].map(({data}) => data))
+            .toEqual([23, 11, 5, 2]);
+        expect([...tree.coPathOfLeafNum(1)].map(({data}) => data))
+            .toEqual([23, 11, 5, 0]);
+        expect([...tree.coPathOfLeafNum(2)].map(({data}) => data))
+            .toEqual([23, 11, 1, 6]);
+        expect([...tree.coPathOfLeafNum(3)].map(({data}) => data))
+            .toEqual([23, 11, 1, 4]);
+        expect([...tree.coPathOfLeafNum(4)].map(({data}) => data))
+            .toEqual([23, 3, 13, 10]);
+        expect([...tree.coPathOfLeafNum(5)].map(({data}) => data))
+            .toEqual([23, 3, 13, 8]);
+        expect([...tree.coPathOfLeafNum(6)].map(({data}) => data))
+            .toEqual([23, 3, 9, 14]);
+        expect([...tree.coPathOfLeafNum(7)].map(({data}) => data))
+            .toEqual([23, 3, 9, 12]);
+        expect([...tree.coPathOfLeafNum(8)].map(({data}) => data))
+            .toEqual([7, 25, 21, 18]);
+        expect([...tree.coPathOfLeafNum(9)].map(({data}) => data))
+            .toEqual([7, 25, 21, 16]);
+        expect([...tree.coPathOfLeafNum(10)].map(({data}) => data))
+            .toEqual([7, 25, 17, 22]);
+        expect([...tree.coPathOfLeafNum(11)].map(({data}) => data))
+            .toEqual([7, 25, 17, 20]);
+        expect([...tree.coPathOfLeafNum(12)].map(({data}) => data))
+            .toEqual([7, 19, 26]);
+        expect([...tree.coPathOfLeafNum(13)].map(({data}) => data))
+            .toEqual([7, 19, 24]);
     });
     it("should replace paths", () => {
         const tree = new Tree<number | string>([
