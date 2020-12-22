@@ -20,12 +20,12 @@ limitations under the License.
  */
 
 import {eqUint8Array} from "./util";
-import {HPKE, KEMPrivateKey} from "./hpke/base";
+import {KEMPrivateKey} from "./hpke/base";
 import {deriveSecret} from "./keyschedule";
-import {CipherSuite, EMPTY_BYTE_ARRAY, MEMBER, WELCOME, NONCE, KEY} from "./constants";
+import {EMPTY_BYTE_ARRAY, MEMBER, WELCOME, NONCE, KEY} from "./constants";
+import {CipherSuite, cipherSuiteById} from "./ciphersuite";
 import {KeyPackage, Extension} from "./keypackage";
 import {HPKECiphertext} from "./message";
-import {Hash} from "./hash";
 import {SigningPrivateKey, SigningPublicKey} from "./signatures";
 import * as tlspl from "./tlspl";
 
@@ -120,7 +120,7 @@ export class GroupInfo {
 export class GroupSecrets {
     constructor(
         readonly joinerSecret: Uint8Array,
-        readonly pathSecret?: Uint8Array,
+        readonly pathSecret?: Uint8Array | undefined,
         // readonly psks?: PreSharedKeyID[], // FIXME:
     ) {}
 
@@ -178,7 +178,7 @@ export class Welcome {
     ) {}
 
     static decode(buffer: Uint8Array, offset: number): [Welcome, number] {
-        const [[cipherSuite, secrets, encryptedGroupInfo], offset1] = tlspl.decode(
+        const [[cipherSuiteId, secrets, encryptedGroupInfo], offset1] = tlspl.decode(
             [
                 tlspl.decodeUint16,
                 tlspl.decodeVector(EncryptedGroupSecrets.decode, 4),
@@ -186,24 +186,28 @@ export class Welcome {
             ],
             buffer, offset,
         );
+        const cipherSuite = cipherSuiteById[cipherSuiteId];
+        if (!cipherSuite) {
+            throw new Error("Unknown ciphersuite");
+        }
         return [new Welcome(cipherSuite, secrets, encryptedGroupInfo), offset1];
     }
     get encoder(): tlspl.Encoder {
         return tlspl.struct([
-            tlspl.uint16(this.cipherSuite),
+            tlspl.uint16(this.cipherSuite.id),
             tlspl.vector(this.secrets.map(x => x.encoder), 4),
             tlspl.variableOpaque(this.encryptedGroupInfo, 4),
         ]);
     }
 
     static async create(
-        hpke: HPKE,
-        hash: Hash,
         cipherSuite: CipherSuite,
         joinerSecret: Uint8Array,
         groupInfo: GroupInfo,
         recipients: {keyPackage: KeyPackage, pathSecret?: Uint8Array}[], // FIXME: psks
     ): Promise<Welcome> {
+        const hpke = cipherSuite.hpke;
+        const hash = cipherSuite.hash;
         const secrets: EncryptedGroupSecrets[] = await Promise.all(
             recipients.map(async ({keyPackage, pathSecret}) => {
                 const encodedKeyPackage = tlspl.encode([keyPackage.encoder]);
@@ -218,7 +222,7 @@ export class Welcome {
         );
 
         const [welcomeNonce, welcomeKey] = await Welcome.calculateWelcomeKey(
-            hpke, joinerSecret, EMPTY_BYTE_ARRAY,
+            cipherSuite, joinerSecret, EMPTY_BYTE_ARRAY,
         );
         const encodedGroupInfo = tlspl.encode([groupInfo.encoder]);
         const encryptedGroupInfo = await hpke.aead.seal(
@@ -229,11 +233,12 @@ export class Welcome {
     }
 
     static async calculateWelcomeKey(
-        hpke: HPKE, joinerSecret: Uint8Array, psk: Uint8Array,
+        cipherSuite: CipherSuite, joinerSecret: Uint8Array, psk: Uint8Array,
     ): Promise<[Uint8Array, Uint8Array]> {
-        const memberIkm = await deriveSecret(hpke, joinerSecret, MEMBER);
+        const hpke = cipherSuite.hpke;
+        const memberIkm = await deriveSecret(cipherSuite, joinerSecret, MEMBER);
         const memberSecret = await hpke.kdf.extract(memberIkm, psk);
-        const welcomeSecret = await deriveSecret(hpke, memberSecret, WELCOME);
+        const welcomeSecret = await deriveSecret(cipherSuite, memberSecret, WELCOME);
 
         return await Promise.all([
             hpke.kdf.expand(welcomeSecret, NONCE, hpke.aead.nonceLength),
@@ -242,8 +247,10 @@ export class Welcome {
     }
 
     async decrypt(
-        hpke: HPKE, hash: Hash, keyPackages: Record<string, [KeyPackage, KEMPrivateKey]>,
+        keyPackages: Record<string, [KeyPackage, KEMPrivateKey]>,
     ): Promise<[GroupSecrets, GroupInfo, string]> {
+        const hpke = this.cipherSuite.hpke;
+        const hash = this.cipherSuite.hash;
         const kpHashes: [string, Uint8Array][] = await Promise.all(
             // eslint-disable-next-line comma-dangle, array-bracket-spacing
             Object.entries(keyPackages).map(async ([id, [keyPackage, ]]): Promise<[string, Uint8Array]> => {
@@ -265,12 +272,12 @@ export class Welcome {
             throw new Error("Not encrypted for our key package");
         }
         const encodedGroupSecrets = await secrets.encryptedGroupSecrets.decrypt(
-            hpke, keyPackages[keyId][1], EMPTY_BYTE_ARRAY,
+            this.cipherSuite.hpke, keyPackages[keyId][1], EMPTY_BYTE_ARRAY,
         );
         // eslint-disable-next-line comma-dangle, array-bracket-spacing
         const [groupSecrets, ] = GroupSecrets.decode(encodedGroupSecrets, 0);
         const [welcomeNonce, welcomeKey] = await Welcome.calculateWelcomeKey(
-            hpke, groupSecrets.joinerSecret, EMPTY_BYTE_ARRAY,
+            this.cipherSuite, groupSecrets.joinerSecret, EMPTY_BYTE_ARRAY,
         )
         const encodedGroupInfo = await hpke.aead.open(
             welcomeKey, welcomeNonce, EMPTY_BYTE_ARRAY, this.encryptedGroupInfo,

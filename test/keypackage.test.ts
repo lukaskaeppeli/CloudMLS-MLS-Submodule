@@ -14,19 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import {x25519HkdfSha256} from "../src/hpke/dhkem";
-import {x25519HkdfSha256Aes128Gcm} from "../src/hpke";
-import {Ed25519} from "../src/signatures";
+import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
 import {BasicCredential, Credential} from "../src/credential";
 import {KeyPackage} from "../src/keypackage";
 import {HPKECiphertext} from "../src/message";
-import {SignatureScheme, ProtocolVersion, CipherSuite, CredentialType} from "../src/constants";
+import {SignatureScheme, ProtocolVersion, CredentialType} from "../src/constants";
 import {stringToUint8Array} from "../src/util";
 import * as tlspl from "../src/tlspl";
 
 describe("key package", () => {
     it("should encode, decode, and have a valid signature", async () => {
-        const [signingPrivKey, signingPubKey] = await Ed25519.generateKeyPair();
+        const [signingPrivKey, signingPubKey] =
+            await cipherSuite.signatureScheme.generateKeyPair();
 
         const credential = new Credential(
             CredentialType.Basic,
@@ -37,11 +36,12 @@ describe("key package", () => {
             ),
         );
 
-        const [, hpkePubKey] = await x25519HkdfSha256.generateKeyPair();
+        const [, hpkePubKey] =
+            await cipherSuite.hpke.kem.generateKeyPair();
 
         const keyPackage: KeyPackage = await KeyPackage.create(
             ProtocolVersion.Mls10,
-            CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519,
+            cipherSuite,
             await hpkePubKey.serialize(),
             credential,
             [],
@@ -64,7 +64,8 @@ describe("key package", () => {
     });
 
     it("should encrypt to a key package", async () => {
-        const [signingPrivKey, signingPubKey] = await Ed25519.generateKeyPair();
+        const [signingPrivKey, signingPubKey] =
+            await cipherSuite.signatureScheme.generateKeyPair();
 
         const credential = new Credential(
             CredentialType.Basic,
@@ -75,11 +76,12 @@ describe("key package", () => {
             ),
         );
 
-        const [hpkePrivKey, hpkePubKey] = await x25519HkdfSha256.generateKeyPair();
+        const [hpkePrivKey, hpkePubKey] =
+            await cipherSuite.hpke.kem.generateKeyPair();
 
         const keyPackage: KeyPackage = await KeyPackage.create(
             ProtocolVersion.Mls10,
-            CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519,
+            cipherSuite,
             await hpkePubKey.serialize(),
             credential,
             [],
@@ -92,13 +94,13 @@ describe("key package", () => {
         const [[decodedKeyPackage], ] = tlspl.decode([KeyPackage.decode], encodedKeyPackage);
 
         const ciphertext = await HPKECiphertext.encrypt(
-            x25519HkdfSha256Aes128Gcm,
+            cipherSuite.hpke,
             await decodedKeyPackage.getHpkeKey(),
             Uint8Array.from([1, 2, 3]), Uint8Array.from([4, 5, 6]),
         );
 
         expect(await ciphertext.decrypt(
-            x25519HkdfSha256Aes128Gcm,
+            cipherSuite.hpke,
             hpkePrivKey,
             Uint8Array.from([1, 2, 3]),
         )).toEqual(Uint8Array.from([4, 5, 6]));

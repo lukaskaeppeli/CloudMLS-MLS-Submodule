@@ -14,14 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import {x25519HkdfSha256Aes128Gcm} from "../src/hpke";
-import {SecretTree, HashRatchet, LenientHashRatchet} from "../src/keyschedule";
+import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
+import {generateSecrets, SecretTree, HashRatchet, LenientHashRatchet} from "../src/keyschedule";
+
+describe("key schedule", () => {
+    it("should generate secrets", async () => {
+        const secrets = await generateSecrets(
+            cipherSuite,
+            new Uint8Array(cipherSuite.hpke.kdf.extractLength),
+            new Uint8Array(cipherSuite.hpke.kdf.extractLength),
+            new Uint8Array(),
+        );
+    });
+});
 
 describe("secret tree", () => {
     it("should derive all leaf ratchets", async () => {
         const secretTree = new SecretTree(
-            x25519HkdfSha256Aes128Gcm,
-            new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength),
+            cipherSuite,
+            new Uint8Array(cipherSuite.hpke.kdf.extractLength),
             5,
         );
         // we should be able to derive all the secrets
@@ -40,8 +51,8 @@ describe("secret tree", () => {
     });
     it("should derive different ratchets", async () => {
         const secretTree = new SecretTree(
-            x25519HkdfSha256Aes128Gcm,
-            new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength),
+            cipherSuite,
+            new Uint8Array(cipherSuite.hpke.kdf.extractLength),
             5,
         );
         const [handshake0, application0] = await secretTree.getRatchetsForLeaf(0);
@@ -95,13 +106,13 @@ describe("secret tree", () => {
 describe("hash ratchet", () => {
     it("should handle out-of-order messages", async () => {
         // we need to copy the secret because it will get clobbered
-        const secret = new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength);
+        const secret = new Uint8Array(cipherSuite.hpke.kdf.extractLength);
         window.crypto.getRandomValues(secret);
         const hashRatchet1 = new HashRatchet(
-            x25519HkdfSha256Aes128Gcm, 0, new Uint8Array(secret),
+            cipherSuite, 0, new Uint8Array(secret),
         );
         const hashRatchet2 = new HashRatchet(
-            x25519HkdfSha256Aes128Gcm, 0, new Uint8Array(secret),
+            cipherSuite, 0, new Uint8Array(secret),
         );
 
         const key1g0 = await hashRatchet1.getKey(0);
@@ -139,13 +150,13 @@ describe("hash ratchet", () => {
 
 describe("lenient hash ratchet", () => {
     it("should generate the same values as hash ratchet", async () => {
-        const secret = new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength);
+        const secret = new Uint8Array(cipherSuite.hpke.kdf.extractLength);
         window.crypto.getRandomValues(secret);
         const hashRatchet1 = new HashRatchet(
-            x25519HkdfSha256Aes128Gcm, 0, new Uint8Array(secret),
+            cipherSuite, 0, new Uint8Array(secret),
         );
         const hashRatchet2 = new LenientHashRatchet(
-            x25519HkdfSha256Aes128Gcm, 0, new Uint8Array(secret),
+            cipherSuite, 0, new Uint8Array(secret),
         );
 
         const key1g0 = await hashRatchet1.getKey(0);
@@ -167,10 +178,10 @@ describe("lenient hash ratchet", () => {
         expect(key1g4).toEqual(key2g4);
     });
     it("should allow re-deriving keys", async () => {
-        const secret = new Uint8Array(x25519HkdfSha256Aes128Gcm.kdf.extractLength);
+        const secret = new Uint8Array(cipherSuite.hpke.kdf.extractLength);
         window.crypto.getRandomValues(secret);
         const hashRatchet = new LenientHashRatchet(
-            x25519HkdfSha256Aes128Gcm, 0, secret,
+            cipherSuite, 0, secret,
         );
         const key1g0 = await hashRatchet.getKey(0);
         const key1g1 = await hashRatchet.getKey(1);

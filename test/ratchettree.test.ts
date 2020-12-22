@@ -14,28 +14,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import {x25519HkdfSha256} from "../src/hpke/dhkem";
-import {x25519HkdfSha256Aes128Gcm} from "../src/hpke";
+import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
 import {Ed25519} from "../src/signatures";
 import {BasicCredential, Credential} from "../src/credential";
 import {NodeData, RatchetTreeView} from "../src/ratchettree";
 import {Extension, KeyPackage} from "../src/keypackage";
 import {Add, Update, Remove} from "../src/message";
-import {SignatureScheme, ProtocolVersion, CipherSuite, CredentialType} from "../src/constants";
+import {ProtocolVersion, CredentialType} from "../src/constants";
 import {stringToUint8Array} from "../src/util";
 import {Tree} from "../src/lbbtree";
 import * as tlspl from "../src/tlspl";
 
 describe("Ratchet Tree", () => {
     it("should export and input", async () => {
-        const [signingPrivKey0, signingPubKey0] = await Ed25519.generateKeyPair();
-        const [signingPrivKey1, signingPubKey1] = await Ed25519.generateKeyPair();
-        const [signingPrivKey2, signingPubKey2] = await Ed25519.generateKeyPair();
+        const [signingPrivKey0, signingPubKey0] =
+            await cipherSuite.signatureScheme.generateKeyPair();
+        const [signingPrivKey1, signingPubKey1] =
+            await cipherSuite.signatureScheme.generateKeyPair();
+        const [signingPrivKey2, signingPubKey2] =
+            await cipherSuite.signatureScheme.generateKeyPair();
         const credential0 = new Credential(
             CredentialType.Basic,
             new BasicCredential(
                 stringToUint8Array("@alice:example.org"),
-                SignatureScheme.ed25519,
+                cipherSuite.signatureSchemeId,
                 await signingPubKey0.serialize(),
             ),
         );
@@ -43,7 +45,7 @@ describe("Ratchet Tree", () => {
             CredentialType.Basic,
             new BasicCredential(
                 stringToUint8Array("@bob:example.org"),
-                SignatureScheme.ed25519,
+                cipherSuite.signatureSchemeId,
                 await signingPubKey1.serialize(),
             ),
         );
@@ -51,20 +53,25 @@ describe("Ratchet Tree", () => {
             CredentialType.Basic,
             new BasicCredential(
                 stringToUint8Array("@carol:example.org"),
-                SignatureScheme.ed25519,
+                cipherSuite.signatureSchemeId,
                 await signingPubKey1.serialize(),
             ),
         );
 
-        const [hpkePrivKey0, hpkePubKey0] = await x25519HkdfSha256.generateKeyPair();
-        const [hpkePrivKey1, hpkePubKey1] = await x25519HkdfSha256.generateKeyPair();
-        const [hpkePrivKey2, hpkePubKey2] = await x25519HkdfSha256.generateKeyPair();
-        const [hpkePrivKey3, hpkePubKey3] = await x25519HkdfSha256.generateKeyPair();
-        const [hpkePrivKey4, hpkePubKey4] = await x25519HkdfSha256.generateKeyPair();
+        const [hpkePrivKey0, hpkePubKey0] =
+            await cipherSuite.hpke.kem.generateKeyPair();
+        const [hpkePrivKey1, hpkePubKey1] =
+            await cipherSuite.hpke.kem.generateKeyPair();
+        const [hpkePrivKey2, hpkePubKey2] =
+            await cipherSuite.hpke.kem.generateKeyPair();
+        const [hpkePrivKey3, hpkePubKey3] =
+            await cipherSuite.hpke.kem.generateKeyPair();
+        const [hpkePrivKey4, hpkePubKey4] =
+            await cipherSuite.hpke.kem.generateKeyPair();
 
         const keyPackage0 = await KeyPackage.create(
             ProtocolVersion.Mls10,
-            CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519,
+            cipherSuite,
             await hpkePubKey0.serialize(),
             credential0,
             [],
@@ -72,7 +79,7 @@ describe("Ratchet Tree", () => {
         );
         const keyPackage1 = await KeyPackage.create(
             ProtocolVersion.Mls10,
-            CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519,
+            cipherSuite,
             await hpkePubKey2.serialize(),
             credential1,
             [],
@@ -80,7 +87,7 @@ describe("Ratchet Tree", () => {
         );
         const keyPackage2 = await KeyPackage.create(
             ProtocolVersion.Mls10,
-            CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519,
+            cipherSuite,
             await hpkePubKey4.serialize(),
             credential2,
             [],
@@ -96,7 +103,7 @@ describe("Ratchet Tree", () => {
         ];
         nodes[3].unmergedLeaves.push(nodes[4]);
         const ratchetTreeView = new RatchetTreeView(
-            x25519HkdfSha256Aes128Gcm, 0,
+            cipherSuite, 0,
             new Tree<NodeData>(nodes),
             [keyPackage0, keyPackage1, keyPackage2],
         );
@@ -106,7 +113,7 @@ describe("Ratchet Tree", () => {
         // eslint-disable-next-line comma-dangle, array-bracket-spacing
         const [[decodedExtension], ] = tlspl.decode([Extension.decode], encodedExtension);
         const decodedRatchetTreeView = await RatchetTreeView.fromRatchetTreeExtension(
-            x25519HkdfSha256Aes128Gcm, decodedExtension, keyPackage1,
+            cipherSuite, decodedExtension, keyPackage1,
             hpkePrivKey1,
         );
 
@@ -144,19 +151,20 @@ describe("Ratchet Tree", () => {
     });
 
     it("should update path", async () => {
-        const [signingPrivKey, signingPubKey] = await Ed25519.generateKeyPair();
+        const [signingPrivKey, signingPubKey] =
+            await cipherSuite.signatureScheme.generateKeyPair();
         const credential = new Credential(
             CredentialType.Basic,
             new BasicCredential(
                 stringToUint8Array("@alice:example.org"),
-                SignatureScheme.ed25519,
+                cipherSuite.signatureSchemeId,
                 await signingPubKey.serialize(),
             ),
         );
         async function makeKeyPackage(pubKey: Uint8Array): Promise<KeyPackage> {
             return await KeyPackage.create(
                 ProtocolVersion.Mls10,
-                CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519,
+                cipherSuite,
                 pubKey,
                 credential,
                 [],
@@ -164,11 +172,16 @@ describe("Ratchet Tree", () => {
             );
         }
 
-        const [hpkePrivKey0, hpkePubKey0] = await x25519HkdfSha256.generateKeyPair();
-        const [hpkePrivKey1, hpkePubKey1] = await x25519HkdfSha256.generateKeyPair();
-        const [hpkePrivKey2, hpkePubKey2] = await x25519HkdfSha256.generateKeyPair();
-        const [hpkePrivKey3, hpkePubKey3] = await x25519HkdfSha256.generateKeyPair();
-        const [hpkePrivKey4, hpkePubKey4] = await x25519HkdfSha256.generateKeyPair();
+        const [hpkePrivKey0, hpkePubKey0] =
+            await cipherSuite.hpke.kem.generateKeyPair();
+        const [hpkePrivKey1, hpkePubKey1] =
+            await cipherSuite.hpke.kem.generateKeyPair();
+        const [hpkePrivKey2, hpkePubKey2] =
+            await cipherSuite.hpke.kem.generateKeyPair();
+        const [hpkePrivKey3, hpkePubKey3] =
+            await cipherSuite.hpke.kem.generateKeyPair();
+        const [hpkePrivKey4, hpkePubKey4] =
+            await cipherSuite.hpke.kem.generateKeyPair();
 
         //     3
         //    / \
@@ -177,7 +190,7 @@ describe("Ratchet Tree", () => {
         // 0   2   4
 
         const ratchetTreeView0v0 = new RatchetTreeView(
-            x25519HkdfSha256Aes128Gcm, 0,
+            cipherSuite, 0,
             new Tree<NodeData>([
                 new NodeData(hpkePrivKey0, hpkePubKey0, [], undefined, undefined),
                 new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, undefined),
@@ -188,7 +201,7 @@ describe("Ratchet Tree", () => {
             new Array(3),
         );
         const ratchetTreeView1v0 = new RatchetTreeView(
-            x25519HkdfSha256Aes128Gcm, 1,
+            cipherSuite, 1,
             new Tree<NodeData>([
                 new NodeData(undefined, hpkePubKey0, [], undefined, undefined),
                 new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, undefined),
@@ -199,7 +212,7 @@ describe("Ratchet Tree", () => {
             new Array(3),
         );
         const ratchetTreeView2v0 = new RatchetTreeView(
-            x25519HkdfSha256Aes128Gcm, 2,
+            cipherSuite, 2,
             new Tree<NodeData>([
                 new NodeData(undefined, hpkePubKey0, [], undefined, undefined),
                 new NodeData(undefined, hpkePubKey1, [], undefined, undefined),
@@ -226,12 +239,12 @@ describe("Ratchet Tree", () => {
     });
 
     it("should remove, update, and add", async () => {
-        const [, signingPubKeyA] = await Ed25519.generateKeyPair();
+        const [, signingPubKeyA] = await cipherSuite.signatureScheme.generateKeyPair();
         const credentialA = new Credential(
             CredentialType.Basic,
             new BasicCredential(
                 stringToUint8Array("@alice:example.org"),
-                SignatureScheme.ed25519,
+                cipherSuite.SignatureSchemeId,
                 await signingPubKeyA.serialize(),
             ),
         );
@@ -240,7 +253,7 @@ describe("Ratchet Tree", () => {
             CredentialType.Basic,
             new BasicCredential(
                 stringToUint8Array("@bob:example.org"),
-                SignatureScheme.ed25519,
+                cipherSuite.SignatureSchemeId,
                 await signingPubKeyB.serialize(),
             ),
         );
@@ -249,7 +262,7 @@ describe("Ratchet Tree", () => {
             CredentialType.Basic,
             new BasicCredential(
                 stringToUint8Array("@carol:example.org"),
-                SignatureScheme.ed25519,
+                cipherSuite.SignatureSchemeId,
                 await signingPubKeyC.serialize(),
             ),
         );
@@ -258,7 +271,7 @@ describe("Ratchet Tree", () => {
             CredentialType.Basic,
             new BasicCredential(
                 stringToUint8Array("@dave:example.org"),
-                SignatureScheme.ed25519,
+                cipherSuite.SignatureSchemeId,
                 await signingPubKeyD.serialize(),
             ),
         );
@@ -267,16 +280,21 @@ describe("Ratchet Tree", () => {
             CredentialType.Basic,
             new BasicCredential(
                 stringToUint8Array("@emma:example.org"),
-                SignatureScheme.ed25519,
+                cipherSuite.SignatureSchemeId,
                 await signingPubKeyE.serialize(),
             ),
         );
 
-        const [hpkePrivKey0, hpkePubKey0] = await x25519HkdfSha256.generateKeyPair();
-        const [hpkePrivKey1, hpkePubKey1] = await x25519HkdfSha256.generateKeyPair();
-        const [hpkePrivKey2, hpkePubKey2] = await x25519HkdfSha256.generateKeyPair();
-        const [hpkePrivKey3, hpkePubKey3] = await x25519HkdfSha256.generateKeyPair();
-        const [hpkePrivKey4, hpkePubKey4] = await x25519HkdfSha256.generateKeyPair();
+        const [hpkePrivKey0, hpkePubKey0] =
+            await cipherSuite.hpke.kem.generateKeyPair();
+        const [hpkePrivKey1, hpkePubKey1] =
+            await cipherSuite.hpke.kem.generateKeyPair();
+        const [hpkePrivKey2, hpkePubKey2] =
+            await cipherSuite.hpke.kem.generateKeyPair();
+        const [hpkePrivKey3, hpkePubKey3] =
+            await cipherSuite.hpke.kem.generateKeyPair();
+        const [hpkePrivKey4, hpkePubKey4] =
+            await cipherSuite.hpke.kem.generateKeyPair();
 
         //     3
         //    / \
@@ -285,7 +303,7 @@ describe("Ratchet Tree", () => {
         // 0   2   4
 
         const ratchetTreeView0v0 = new RatchetTreeView(
-            x25519HkdfSha256Aes128Gcm, 0,
+            cipherSuite, 0,
             new Tree<NodeData>([
                 new NodeData(hpkePrivKey0, hpkePubKey0, [], credentialA, undefined),
                 new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, undefined),
@@ -296,7 +314,7 @@ describe("Ratchet Tree", () => {
             new Array(3),
         );
         const ratchetTreeView1v0 = new RatchetTreeView(
-            x25519HkdfSha256Aes128Gcm, 1,
+            cipherSuite, 1,
             new Tree<NodeData>([
                 new NodeData(undefined, hpkePubKey0, [], credentialA, undefined),
                 new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, undefined),
@@ -307,7 +325,7 @@ describe("Ratchet Tree", () => {
             new Array(3),
         );
         const ratchetTreeView2v0 = new RatchetTreeView(
-            x25519HkdfSha256Aes128Gcm, 2,
+            cipherSuite, 2,
             new Tree<NodeData>([
                 new NodeData(undefined, hpkePubKey0, [], credentialA, undefined),
                 new NodeData(undefined, hpkePubKey1, [], undefined, undefined),
@@ -318,30 +336,30 @@ describe("Ratchet Tree", () => {
             new Array(3),
         );
 
-        const [, hpkePubKey2v1] = await x25519HkdfSha256.generateKeyPair();
+        const [, hpkePubKey2v1] = await cipherSuite.hpke.kem.generateKeyPair();
         const kpBv1 = await KeyPackage.create(
             ProtocolVersion.Mls10,
-            CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519,
+            cipherSuite,
             await hpkePubKey2v1.serialize(),
             credentialB,
             [],
             signingPrivKeyB,
         );
 
-        const [, hpkePubKey0v1] = await x25519HkdfSha256.generateKeyPair();
+        const [, hpkePubKey0v1] = await cipherSuite.hpke.kem.generateKeyPair();
         const kpDv1 = await KeyPackage.create(
             ProtocolVersion.Mls10,
-            CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519,
+            cipherSuite,
             await hpkePubKey0v1.serialize(),
             credentialD,
             [],
             signingPrivKeyD,
         );
 
-        const [, hpkePubKey6v1] = await x25519HkdfSha256.generateKeyPair();
+        const [, hpkePubKey6v1] = await cipherSuite.hpke.kem.generateKeyPair();
         const kpEv1 = await KeyPackage.create(
             ProtocolVersion.Mls10,
-            CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519,
+            cipherSuite,
             await hpkePubKey6v1.serialize(),
             credentialE,
             [],

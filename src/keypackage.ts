@@ -20,12 +20,12 @@ limitations under the License.
  * https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#key-packages
  */
 
-import {ExtensionType, ProtocolVersion, CipherSuite, NodeType} from "./constants";
+import {ExtensionType, ProtocolVersion, NodeType} from "./constants";
+import {CipherSuite, cipherSuiteById} from "./ciphersuite";
 import {Credential} from "./credential";
 import {SigningPrivateKey} from "./signatures";
 import {KEMPublicKey} from "./hpke/base";
 import * as tlspl from "./tlspl";
-import {x25519HkdfSha256} from "./hpke/dhkem";
 
 export abstract class Extension {
     constructor(readonly extensionType: ExtensionType) {}
@@ -63,7 +63,7 @@ export abstract class Extension {
 export class Capabilities extends Extension {
     constructor(
         readonly versions: ProtocolVersion[],
-        readonly ciphersuites: CipherSuite[],
+        readonly ciphersuites: number[],
         readonly extensions: ExtensionType[],
     ) {
         super(ExtensionType.Capabilities);
@@ -96,15 +96,9 @@ export class ParentNode {
         readonly parentHash: Uint8Array,
     ) {}
 
-    async getHpkeKey(cipherSuite): Promise<KEMPublicKey> {
+    async getHpkeKey(cipherSuite: CipherSuite): Promise<KEMPublicKey> {
         if (!this.hpkeKey) {
-            switch (cipherSuite) {
-                case CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519:
-                    this.hpkeKey = await x25519HkdfSha256.deserialize(this.publicKey);
-                    break;
-                default:
-                    throw new Error("Unknown cipher suite");
-            }
+            this.hpkeKey = await cipherSuite.hpke.kem.deserialize(this.publicKey);
         }
         return this.hpkeKey;
     }
@@ -205,7 +199,7 @@ export class KeyPackage {
     ): Promise<KeyPackage> {
         const unsignedEncoding: Uint8Array = tlspl.encode([
             tlspl.uint8(version),
-            tlspl.uint16(cipherSuite),
+            tlspl.uint16(cipherSuite.id),
             tlspl.variableOpaque(hpkeInitKey, 2),
             credential.encoder,
             tlspl.vector(extensions.map(ext => ext.encoder), 4),
@@ -222,20 +216,14 @@ export class KeyPackage {
     }
     async getHpkeKey(): Promise<KEMPublicKey> {
         if (!this.hpkeKey) {
-            switch (this.cipherSuite) {
-                case CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519:
-                    this.hpkeKey = await x25519HkdfSha256.deserialize(this.hpkeInitKey);
-                    break;
-                default:
-                    throw new Error("Unknown cipher suite");
-            }
+            this.hpkeKey = await this.cipherSuite.hpke.kem.deserialize(this.hpkeInitKey);
         }
         return this.hpkeKey;
     }
 
     static decode(buffer: Uint8Array, offset: number): [KeyPackage, number] {
         const [
-            [version, cipherSuite, hpkeInitKey, credential, extensions],
+            [version, cipherSuiteId, hpkeInitKey, credential, extensions],
             offset1,
         ] = tlspl.decode(
             [
@@ -247,9 +235,13 @@ export class KeyPackage {
             ],
             buffer, offset,
         );
+        const cipherSuite = cipherSuiteById[cipherSuiteId];
+        if (!cipherSuite) {
+            throw new Error("Unknown ciphersuite");
+        }
         const [[signature], offset2] = tlspl.decode(
             [tlspl.decodeVariableOpaque(2)], buffer, offset1,
-        )
+        );
         return [
             new KeyPackage(
                 version, cipherSuite, hpkeInitKey, credential, extensions,
@@ -261,7 +253,7 @@ export class KeyPackage {
     get encoder(): tlspl.Encoder {
         return tlspl.struct([
             tlspl.uint8(this.version),
-            tlspl.uint16(this.cipherSuite),
+            tlspl.uint16(this.cipherSuite.id),
             tlspl.variableOpaque(this.hpkeInitKey, 2),
             this.credential.encoder,
             tlspl.vector(this.extensions.map(ext => ext.encoder), 4),

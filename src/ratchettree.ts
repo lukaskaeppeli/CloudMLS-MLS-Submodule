@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import {EMPTY_BYTE_ARRAY, NODE, PATH, CipherSuite, ProposalType} from "./constants";
+import {EMPTY_BYTE_ARRAY, NODE, PATH, ProposalType} from "./constants";
 import {eqUint8Array} from "./util";
 import {Leaf, Node, Tree} from "./lbbtree";
 import {Extension, ParentNode, RatchetTree, KeyPackage} from "./keypackage";
-import {KEMPrivateKey, KEMPublicKey, HPKE} from "./hpke/base";
+import {KEMPrivateKey, KEMPublicKey} from "./hpke/base";
+import {CipherSuite} from "./ciphersuite";
 import {deriveSecret} from "./keyschedule";
 import {Credential} from "./credential";
 import {HPKECiphertext, UpdatePathNode, UpdatePath, Add, Update, Remove, Proposal} from "./message";
@@ -78,7 +79,7 @@ export class RatchetTreeView {
     readonly idToLeafNum: Map<string, number>;
     readonly emptyLeaves: number[];
     constructor(
-        readonly hpke: HPKE,
+        readonly cipherSuite: CipherSuite,
         readonly leafNum: number,
         readonly tree: Tree<NodeData>,
         readonly keyPackages: (KeyPackage | undefined)[],
@@ -130,7 +131,7 @@ export class RatchetTreeView {
         return new RatchetTree(nodes);
     }
     static async fromRatchetTreeExtension(
-        hpke: HPKE, ext: RatchetTree, keyPackage: KeyPackage, secretKey: KEMPrivateKey,
+        cipherSuite: CipherSuite, ext: RatchetTree, keyPackage: KeyPackage, secretKey: KEMPrivateKey,
     ): Promise<RatchetTreeView> {
         const ourIdentity = keyPackage.credential.credential.identity;
         let leafNum: number | undefined = undefined;
@@ -176,7 +177,7 @@ export class RatchetTreeView {
                 // FIXME: check parentHash
                 nodes[i] = new NodeData(
                     undefined,
-                    await node.getHpkeKey(CipherSuite.MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519),
+                    await node.getHpkeKey(cipherSuite),
                     node.unmergedLeaves.map(leafNum => nodes[leafNum * 2]),
                     undefined,
                     undefined,
@@ -189,7 +190,7 @@ export class RatchetTreeView {
         }
         nodes[leafNum * 2].privateKey = secretKey;
         return new RatchetTreeView(
-            hpke,
+            cipherSuite,
             leafNum,
             new Tree(nodes),
             keyPackages,
@@ -206,9 +207,9 @@ export class RatchetTreeView {
         const keyPackages = Array.from(this.keyPackages); // FIXME: O(n)
 
         // FIXME: is this the right length?
-        const leafSecret = new Uint8Array(this.hpke.kem.privateKeyLength);
+        const leafSecret = new Uint8Array(this.cipherSuite.hpke.kem.privateKeyLength);
         window.crypto.getRandomValues(leafSecret);
-        const [leafPriv, leafPub] = await this.hpke.kem.deriveKeyPair(leafSecret);
+        const [leafPriv, leafPub] = await this.cipherSuite.hpke.kem.deriveKeyPair(leafSecret);
         const newPath: NodeData[] = [new NodeData(
             leafPriv,
             leafPub,
@@ -225,9 +226,9 @@ export class RatchetTreeView {
 
         for (let i = 0; i < n; i++) {
             // derive secrets for this node
-            currPathSecret = await deriveSecret(this.hpke, currPathSecret, PATH);
-            const currNodeSecret = await deriveSecret(this.hpke, currPathSecret, NODE);
-            const [currNodePriv, currNodePub] = await this.hpke.kem.deriveKeyPair(currNodeSecret);
+            currPathSecret = await deriveSecret(this.cipherSuite, currPathSecret, PATH);
+            const currNodeSecret = await deriveSecret(this.cipherSuite, currPathSecret, NODE);
+            const [currNodePriv, currNodePub] = await this.cipherSuite.hpke.kem.deriveKeyPair(currNodeSecret);
 
             newPath.push(new NodeData(
                 currNodePriv,
@@ -244,7 +245,7 @@ export class RatchetTreeView {
                 // corresponding copath node MUST be filtered by removing all
                 // new leaf nodes added as part of this MLS Commit message."
                 encryptedPathSecret.push(await HPKECiphertext.encrypt(
-                    this.hpke,
+                    this.cipherSuite.hpke,
                     nodeData.publicKey,
                     EMPTY_BYTE_ARRAY, // FIXME: group context,
                     currPathSecret,
@@ -266,8 +267,8 @@ export class RatchetTreeView {
 
         return [
             updatePath,
-            await deriveSecret(this.hpke, currPathSecret, PATH),
-            new RatchetTreeView(this.hpke, this.leafNum, newTree, keyPackages),
+            await deriveSecret(this.cipherSuite, currPathSecret, PATH),
+            new RatchetTreeView(this.cipherSuite, this.leafNum, newTree, keyPackages),
         ];
     }
 
@@ -311,7 +312,7 @@ export class RatchetTreeView {
             for (const [encryptedPathSecret, key] of encrKeyPairs) {
                 try {
                     currPathSecret = await encryptedPathSecret.decrypt(
-                        this.hpke, key,
+                        this.cipherSuite.hpke, key,
                         EMPTY_BYTE_ARRAY, // FIXME: group context,
                     );
                     break;
@@ -322,7 +323,7 @@ export class RatchetTreeView {
             }
             newPath.push(new NodeData(
                 undefined,
-                await this.hpke.kem.deserialize(updatePathNode.publicKey),
+                await this.cipherSuite.hpke.kem.deserialize(updatePathNode.publicKey),
                 [], // FIXME: ???
                 undefined,
                 undefined, // FIXME:
@@ -334,8 +335,8 @@ export class RatchetTreeView {
         }
 
         for (; i < updatePath.nodes.length; i++) {
-            const currNodeSecret = await deriveSecret(this.hpke, currPathSecret, NODE);
-            const [currNodePriv, currNodePub] = await this.hpke.kem.deriveKeyPair(currNodeSecret);
+            const currNodeSecret = await deriveSecret(this.cipherSuite, currPathSecret, NODE);
+            const [currNodePriv, currNodePub] = await this.cipherSuite.hpke.kem.deriveKeyPair(currNodeSecret);
 
             const serializedPubKey = await currNodePub.serialize();
             if (!eqUint8Array(serializedPubKey, updatePath.nodes[i].publicKey)) {
@@ -350,7 +351,7 @@ export class RatchetTreeView {
                 undefined, // FIXME:
             ));
 
-            currPathSecret = await deriveSecret(this.hpke, currPathSecret, PATH);
+            currPathSecret = await deriveSecret(this.cipherSuite, currPathSecret, PATH);
         }
 
         const newTree = this.tree.replacePathToLeaf(fromNode, newPath.reverse());
@@ -358,7 +359,7 @@ export class RatchetTreeView {
         return [
             currPathSecret,
             new RatchetTreeView(
-                this.hpke,
+                this.cipherSuite,
                 this.leafNum,
                 newTree,
                 keyPackages,
@@ -503,7 +504,7 @@ export class RatchetTreeView {
         }
 
         return new RatchetTreeView(
-            this.hpke,
+            this.cipherSuite,
             this.leafNum,
             tree,
             keyPackages,

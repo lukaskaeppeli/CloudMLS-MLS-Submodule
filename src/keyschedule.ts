@@ -42,18 +42,18 @@ import {
     TREE,
     WELCOME,
 } from "./constants";
-import {HPKE} from "./hpke/base";
+import {CipherSuite} from "./ciphersuite";
 import * as tlspl from "./tlspl";
 import {left, right, directPath, root} from "./treemath";
 
 export async function expandWithLabel(
-    hpke: HPKE,
+    cipherSuite: CipherSuite,
     secret: Uint8Array,
     label: Uint8Array,
     context: Uint8Array,
     length: number,
 ): Promise<Uint8Array> {
-    return hpke.kdf.expand(
+    return cipherSuite.hpke.kdf.expand(
         secret,
         tlspl.encode([
             tlspl.uint16(length),
@@ -65,11 +65,13 @@ export async function expandWithLabel(
 }
 
 export async function deriveSecret(
-    hpke: HPKE,
+    cipherSuite: CipherSuite,
     secret: Uint8Array,
     label: Uint8Array,
 ): Promise<Uint8Array> {
-    return expandWithLabel(hpke, secret, label, EMPTY_BYTE_ARRAY, hpke.kdf.extractLength);
+    return expandWithLabel(
+        cipherSuite, secret, label, EMPTY_BYTE_ARRAY, cipherSuite.hpke.kdf.extractLength,
+    );
 }
 
 interface Secrets {
@@ -88,20 +90,20 @@ interface Secrets {
 }
 
 export async function generateSecrets(
-    hpke: HPKE,
+    cipherSuite: CipherSuite,
     initSecret: Uint8Array,
     commitSecret: Uint8Array,
     groupContext: Uint8Array,
-    psk?: Uint8Array,
+    psk?: Uint8Array | undefined,
 ): Promise<Secrets> {
-    const joinerSecret = await hpke.kdf.extract(initSecret, commitSecret);
+    const joinerSecret = await cipherSuite.hpke.kdf.extract(initSecret, commitSecret);
     return await generateSecretsFromJoinerSecret(
-        hpke, joinerSecret, commitSecret, groupContext, psk,
+        cipherSuite, joinerSecret, commitSecret, groupContext, psk,
     );
 }
 
 export async function generateSecretsFromJoinerSecret(
-    hpke: HPKE,
+    cipherSuite: CipherSuite,
     joinerSecret: Uint8Array,
     commitSecret: Uint8Array,
     groupContext: Uint8Array,
@@ -110,15 +112,15 @@ export async function generateSecretsFromJoinerSecret(
     if (psk === undefined) {
         psk = EMPTY_BYTE_ARRAY;
     }
-    const memberIkm = await deriveSecret(hpke, joinerSecret, MEMBER);
-    const memberSecret = await hpke.kdf.extract(memberIkm, psk);
-    const welcomeSecret = await deriveSecret(hpke, memberSecret, WELCOME);
+    const memberIkm = await deriveSecret(cipherSuite, joinerSecret, MEMBER);
+    const memberSecret = await cipherSuite.hpke.kdf.extract(memberIkm, psk);
+    const welcomeSecret = await deriveSecret(cipherSuite, memberSecret, WELCOME);
     const epochSecret = await expandWithLabel(
-        hpke,
+        cipherSuite,
         welcomeSecret,
         EPOCH,
         groupContext,
-        hpke.kdf.extractLength,
+        cipherSuite.hpke.kdf.extractLength,
     );
 
     const [
@@ -141,7 +143,7 @@ export async function generateSecretsFromJoinerSecret(
         MEMBERSHIP,
         RESUMPTION,
         INIT,
-    ].map(label => deriveSecret(hpke, epochSecret, label)))
+    ].map(label => deriveSecret(cipherSuite, epochSecret, label)))
 
     return {
         joinerSecret,
@@ -162,7 +164,7 @@ export async function generateSecretsFromJoinerSecret(
 // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#secret-tree-secret-tree
 
 async function deriveTreeSecret(
-    hpke: HPKE,
+    cipherSuite: CipherSuite,
     secret: Uint8Array,
     label: Uint8Array,
     node: number,
@@ -170,7 +172,7 @@ async function deriveTreeSecret(
     length: number,
 ): Promise<Uint8Array> {
     return expandWithLabel(
-        hpke,
+        cipherSuite,
         secret,
         label,
         tlspl.encode([
@@ -184,7 +186,7 @@ async function deriveTreeSecret(
 export class SecretTree {
     private keyTree: {[index: number]: Uint8Array};
     constructor(
-        readonly hpke: HPKE,
+        readonly cipherSuite: CipherSuite,
         encryptionSecret: Uint8Array,
         readonly treeSize: number,
     ) {
@@ -198,12 +200,12 @@ export class SecretTree {
             [left(nodeNum), right(nodeNum, this.treeSize)];
         const [leftSecret, rightSecret] = await Promise.all([
             deriveTreeSecret(
-                this.hpke, treeNodeSecret, TREE,
-                leftChildNum, 0, this.hpke.kdf.extractLength,
+                this.cipherSuite, treeNodeSecret, TREE,
+                leftChildNum, 0, this.cipherSuite.hpke.kdf.extractLength,
             ),
             deriveTreeSecret(
-                this.hpke, treeNodeSecret, TREE,
-                rightChildNum, 0, this.hpke.kdf.extractLength,
+                this.cipherSuite, treeNodeSecret, TREE,
+                rightChildNum, 0, this.cipherSuite.hpke.kdf.extractLength,
             ),
         ]);
         this.keyTree[leftChildNum] = leftSecret;
@@ -233,19 +235,19 @@ export class SecretTree {
 
         const [handshakeSecret, applicationSecret] = await Promise.all([
             deriveTreeSecret(
-                this.hpke, leafSecret, HANDSHAKE,
-                nodeNum, 0, this.hpke.kdf.extractLength,
+                this.cipherSuite, leafSecret, HANDSHAKE,
+                nodeNum, 0, this.cipherSuite.hpke.kdf.extractLength,
             ),
             deriveTreeSecret(
-                this.hpke, leafSecret, APPLICATION,
-                nodeNum, 0, this.hpke.kdf.extractLength,
+                this.cipherSuite, leafSecret, APPLICATION,
+                nodeNum, 0, this.cipherSuite.hpke.kdf.extractLength,
             ),
         ]);
         leafSecret.fill(0);
 
         return [
-            new HashRatchet(this.hpke, nodeNum, handshakeSecret),
-            new HashRatchet(this.hpke, nodeNum, applicationSecret),
+            new HashRatchet(this.cipherSuite, nodeNum, handshakeSecret),
+            new HashRatchet(this.cipherSuite, nodeNum, applicationSecret),
         ];
     }
 }
@@ -255,7 +257,11 @@ export class SecretTree {
 export class HashRatchet {
     public generation;
     private savedKeys: {[index: number]: [Uint8Array, Uint8Array]}
-    constructor(readonly hpke: HPKE, readonly nodeNum: number, private secret: Uint8Array) {
+    constructor(
+        readonly cipherSuite: CipherSuite,
+        readonly nodeNum: number,
+        private secret: Uint8Array
+    ) {
         this.generation = 0;
         this.savedKeys = {};
     }
@@ -278,16 +284,16 @@ export class HashRatchet {
     private async advance(): Promise<[Uint8Array, Uint8Array]> {
         const [nonce, key, nextSecret] = await Promise.all([
             deriveTreeSecret(
-                this.hpke, this.secret, NONCE,
-                this.nodeNum, this.generation, this.hpke.aead.nonceLength,
+                this.cipherSuite, this.secret, NONCE,
+                this.nodeNum, this.generation, this.cipherSuite.hpke.aead.nonceLength,
             ),
             deriveTreeSecret(
-                this.hpke, this.secret, KEY,
-                this.nodeNum, this.generation, this.hpke.aead.keyLength,
+                this.cipherSuite, this.secret, KEY,
+                this.nodeNum, this.generation, this.cipherSuite.hpke.aead.keyLength,
             ),
             deriveTreeSecret(
-                this.hpke, this.secret, SECRET,
-                this.nodeNum, this.generation, this.hpke.kdf.extractLength,
+                this.cipherSuite, this.secret, SECRET,
+                this.nodeNum, this.generation, this.cipherSuite.hpke.kdf.extractLength,
             ),
         ]);
         this.secret.fill(0);
@@ -302,8 +308,8 @@ export class HashRatchet {
  */
 export class LenientHashRatchet extends HashRatchet {
     private origSecret: Uint8Array;
-    constructor(hpke: HPKE, nodeNum: number, secret: Uint8Array) {
-        super(hpke, nodeNum, secret);
+    constructor(cipherSuite: CipherSuite, nodeNum: number, secret: Uint8Array) {
+        super(cipherSuite, nodeNum, secret);
         this.origSecret = new Uint8Array(secret);
     }
     async getKey(generation: number): Promise<[Uint8Array, Uint8Array]> {
@@ -313,8 +319,8 @@ export class LenientHashRatchet extends HashRatchet {
             let secret = this.origSecret;
             for (let i = 0; i < generation; i++) {
                 const newSecret = await deriveTreeSecret(
-                    this.hpke, secret, SECRET,
-                    this.nodeNum, i, this.hpke.kdf.extractLength,
+                    this.cipherSuite, secret, SECRET,
+                    this.nodeNum, i, this.cipherSuite.hpke.kdf.extractLength,
                 );
                 if (secret !== this.origSecret) {
                     secret.fill(0);
@@ -323,12 +329,12 @@ export class LenientHashRatchet extends HashRatchet {
             }
             const [nonce, key] = await Promise.all([
                 deriveTreeSecret(
-                    this.hpke, secret, NONCE,
-                    this.nodeNum, generation, this.hpke.aead.nonceLength,
+                    this.cipherSuite, secret, NONCE,
+                    this.nodeNum, generation, this.cipherSuite.hpke.aead.nonceLength,
                 ),
                 deriveTreeSecret(
-                    this.hpke, secret, KEY,
-                    this.nodeNum, generation, this.hpke.aead.keyLength,
+                    this.cipherSuite, secret, KEY,
+                    this.nodeNum, generation, this.cipherSuite.hpke.aead.keyLength,
                 ),
             ]);
             return [nonce, key];

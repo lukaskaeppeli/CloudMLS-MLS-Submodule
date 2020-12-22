@@ -55,16 +55,6 @@ export const TREE = stringToUint8Array("tree");
 export const WELCOME = stringToUint8Array("welcome");
 
 // uint16
-export enum CipherSuite {
-    MLS10_128_DHKEMX25519_AES128GCM_SHA256_Ed25519 = 1,
-    MLS10_128_DHKEMP256_AES128GCM_SHA256_P256 = 2,
-    MLS10_128_DHKEMX25519_CHACHA20POLY1305_SHA256_Ed25519 = 3,
-    MLS10_256_DHKEMX448_AES256GCM_SHA512_Ed448 = 4,
-    MLS10_256_DHKEMP521_AES256GCM_SHA512_P521 = 5,
-    MLS10_256_DHKEMX448_CHACHA20POLY1305_SHA512_Ed448 = 6,
-}
-
-// uint16
 export enum ExtensionType {
     Capabilities = 1,
     Lifetime = 2,

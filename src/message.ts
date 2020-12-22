@@ -21,7 +21,7 @@ import {HPKE, KEMPublicKey, KEMPrivateKey} from "./hpke/base";
 import {EMPTY_BYTE_ARRAY, NONCE, KEY, ContentType, SenderType, ProposalType, ProposalOrRefType} from "./constants";
 import {KeyPackage} from "./keypackage";
 import {SigningPublicKey, SigningPrivateKey} from "./signatures";
-import {Hash} from "./hash";
+import {CipherSuite} from "./ciphersuite";
 import {expandWithLabel, HashRatchet} from "./keyschedule";
 import {GroupContext} from "./ratchettree";
 import * as tlspl from "./tlspl";
@@ -162,7 +162,7 @@ export class MLSPlaintext {
     }
 
     static async create(
-        hash: Hash,
+        cipherSuite: CipherSuite,
         groupId: Uint8Array,
         epoch: number,
         sender: Sender,
@@ -194,7 +194,7 @@ export class MLSPlaintext {
         const signature: Uint8Array = await signingKey.sign(mlsPlaintextTBS);
         const membershipTag =
             membershipKey ?
-                await hash.mac(
+                await cipherSuite.hash.mac(
                     membershipKey,
                     tlspl.encode([
                         tlspl.opaque(mlsPlaintextTBS),
@@ -220,7 +220,7 @@ export class MLSPlaintext {
     }
 
     async verify(
-        hash: Hash,
+        cipherSuite: CipherSuite,
         signingPubKey: SigningPublicKey,
         context?: GroupContext,
         membershipKey?: Uint8Array,
@@ -259,7 +259,7 @@ export class MLSPlaintext {
                     ) :
                     tlspl.uint8(0),
             ]);
-            return await hash.verifyMac(
+            return await cipherSuite.hash.verifyMac(
                 membershipKey, mlsPlaintextTBM, this.membershipTag,
             );
         }
@@ -329,7 +329,7 @@ export class MLSCiphertext {
     ) {}
 
     static async create(
-        hpke: HPKE,
+        cipherSuite: CipherSuite,
         plaintext: MLSPlaintext,
         contentRatchet: HashRatchet,
         senderDataSecret: Uint8Array,
@@ -338,6 +338,7 @@ export class MLSCiphertext {
             throw new Error("Sender must be a group member");
         }
 
+        const hpke = cipherSuite.hpke;
         const mlsCiphertextContent = tlspl.encode([
             plaintext.content instanceof Uint8Array ?
                 tlspl.variableOpaque(plaintext.content, 4) :
@@ -385,10 +386,10 @@ export class MLSCiphertext {
         const ciphertextSample = ciphertext.subarray(0, hpke.kdf.extractLength);
         const [senderDataKey, senderDataNonce] = await Promise.all([
             expandWithLabel(
-                hpke, senderDataSecret, KEY, ciphertextSample, hpke.aead.keyLength,
+                cipherSuite, senderDataSecret, KEY, ciphertextSample, hpke.aead.keyLength,
             ),
             expandWithLabel(
-                hpke, senderDataSecret, NONCE, ciphertextSample, hpke.aead.nonceLength,
+                cipherSuite, senderDataSecret, NONCE, ciphertextSample, hpke.aead.nonceLength,
             ),
         ]);
         const encryptedSenderData = await hpke.aead.seal(
@@ -404,10 +405,11 @@ export class MLSCiphertext {
         );
     }
     async decrypt(
-        hpke: HPKE,
+        cipherSuite: CipherSuite,
         getContentRatchet: (number) => Promise<HashRatchet> | HashRatchet,
         senderDataSecret: Uint8Array,
     ): Promise<MLSPlaintext> {
+        const hpke = cipherSuite.hpke;
         // decrypt sender
         const mlsSenderDataAad = tlspl.encode([
             tlspl.variableOpaque(this.groupId, 1),
@@ -417,10 +419,10 @@ export class MLSCiphertext {
         const ciphertextSample = this.ciphertext.subarray(0, hpke.kdf.extractLength);
         const [senderDataKey, senderDataNonce] = await Promise.all([
             expandWithLabel(
-                hpke, senderDataSecret, KEY, ciphertextSample, hpke.aead.keyLength,
+                cipherSuite, senderDataSecret, KEY, ciphertextSample, hpke.aead.keyLength,
             ),
             expandWithLabel(
-                hpke, senderDataSecret, NONCE, ciphertextSample, hpke.aead.nonceLength,
+                cipherSuite, senderDataSecret, NONCE, ciphertextSample, hpke.aead.nonceLength,
             ),
         ]);
         const mlsSenderData = await hpke.aead.open(
