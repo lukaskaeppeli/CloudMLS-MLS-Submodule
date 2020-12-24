@@ -19,11 +19,15 @@ import {generateSecrets, SecretTree, HashRatchet, LenientHashRatchet} from "../s
 import {GroupContext} from "../src/ratchettree";
 
 describe("key schedule", () => {
-    it("should generate secrets", async () => {
+    it("should generate distinct secrets", async () => {
+        const initSecret = new Uint8Array(cipherSuite.hpke.kdf.extractLength);
+        window.crypto.getRandomValues(initSecret);
+        const commitSecret = new Uint8Array(cipherSuite.hpke.kdf.extractLength);
+        window.crypto.getRandomValues(commitSecret);
         const secrets = await generateSecrets(
             cipherSuite,
-            new Uint8Array(cipherSuite.hpke.kdf.extractLength),
-            new Uint8Array(cipherSuite.hpke.kdf.extractLength),
+            initSecret,
+            commitSecret,
             new GroupContext(
                 new Uint8Array(),
                 0,
@@ -32,6 +36,10 @@ describe("key schedule", () => {
                 [],
             ),
         );
+        const sortedSecrets = Object.values(secrets).sort();
+        for (let i = 1; i < sortedSecrets.length; i++) {
+            expect(sortedSecrets[i-1]).not.toEqual(sortedSecrets[i]);
+        }
     });
 });
 
