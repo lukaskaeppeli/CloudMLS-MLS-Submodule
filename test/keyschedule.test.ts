@@ -16,6 +16,7 @@ limitations under the License.
 
 import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
 import {generateSecrets, SecretTree, HashRatchet, LenientHashRatchet} from "../src/keyschedule";
+import {GroupContext} from "../src/ratchettree";
 
 describe("key schedule", () => {
     it("should generate secrets", async () => {
@@ -23,7 +24,13 @@ describe("key schedule", () => {
             cipherSuite,
             new Uint8Array(cipherSuite.hpke.kdf.extractLength),
             new Uint8Array(cipherSuite.hpke.kdf.extractLength),
-            new Uint8Array(),
+            new GroupContext(
+                new Uint8Array(),
+                0,
+                new Uint8Array(),
+                new Uint8Array(),
+                [],
+            ),
         );
     });
 });

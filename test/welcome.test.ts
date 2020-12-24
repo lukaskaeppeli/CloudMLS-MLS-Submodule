@@ -18,11 +18,9 @@ import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src
 import {stringToUint8Array} from "../src/util";
 import {
     EMPTY_BYTE_ARRAY,
-    SignatureScheme,
-    CredentialType,
     ProtocolVersion,
 } from "../src/constants";
-import {BasicCredential, Credential} from "../src/credential";
+import {BasicCredential} from "../src/credential";
 import {GroupInfo, Welcome} from "../src/welcome";
 import {KeyPackage} from "../src/keypackage";
 
@@ -37,13 +35,10 @@ describe("welcome", () => {
 
         const [recipSigningPrivKey, recipSigningPubKey] =
             await cipherSuite.signatureScheme.generateKeyPair();
-        const credential = new Credential(
-            CredentialType.Basic,
-            new BasicCredential(
-                stringToUint8Array("@alice:example.org"),
-                cipherSuite.signatureSchemeId,
-                await recipSigningPubKey.serialize(),
-            ),
+        const credential = new BasicCredential(
+            stringToUint8Array("@alice:example.org"),
+            cipherSuite.signatureSchemeId,
+            await recipSigningPubKey.serialize(),
         );
         const [hpkePrivKey, hpkePubKey] = await cipherSuite.hpke.kem.generateKeyPair();
         const keyPackage = await KeyPackage.create(

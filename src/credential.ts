@@ -23,13 +23,41 @@ import {CredentialType, SignatureScheme} from "./constants";
 import {SigningPublicKey, Ed25519} from "./signatures";
 import * as tlspl from "./tlspl";
 
-export class BasicCredential {
+export abstract class Credential {
+    constructor(readonly credentialType: CredentialType) {}
+
+    abstract verify(message: Uint8Array, signature: Uint8Array): Promise<boolean>;
+    abstract get identity(): Uint8Array;
+
+    abstract get credentialEncoder(): tlspl.Encoder;
+    static decode(buffer: Uint8Array, offset: number): [Credential, number] {
+        const [[credentialType], offset1] = tlspl.decode(
+            [tlspl.decodeUint16], buffer, offset,
+        );
+        switch (credentialType) {
+            case CredentialType.Basic:
+                return BasicCredential.decode(buffer, offset1);
+            default:
+                throw new Error("Unknown credential type");
+        }
+    }
+    get encoder(): tlspl.Encoder {
+        return tlspl.struct([
+            tlspl.uint16(this.credentialType),
+            this.credentialEncoder,
+        ]);
+    }
+}
+
+export class BasicCredential extends Credential {
     private publicKey: SigningPublicKey;
     constructor(
         readonly identity: Uint8Array,
         readonly signatureScheme: SignatureScheme,
         readonly signatureKey: Uint8Array,
-    ) {}
+    ) {
+        super(CredentialType.Basic);
+    }
     async verify(message: Uint8Array, signature: Uint8Array): Promise<boolean> {
         if (!this.publicKey) {
             switch (this.signatureScheme) {
@@ -55,7 +83,7 @@ export class BasicCredential {
         );
         return [new BasicCredential(identity, signatureScheme, signatureKey), offset1];
     }
-    get encoder(): tlspl.Encoder {
+    get credentialEncoder(): tlspl.Encoder {
         return tlspl.struct([
             tlspl.variableOpaque(this.identity, 2),
             tlspl.uint16(this.signatureScheme),
@@ -64,38 +92,4 @@ export class BasicCredential {
     }
 }
 
-export class Credential {
-    constructor(
-        readonly credentialType: CredentialType,
-        readonly credential: BasicCredential, // FIXME: or x509 certificate
-    ) {}
-    verify(message: Uint8Array, signature: Uint8Array): Promise<boolean> {
-        return this.credential.verify(message, signature);
-    }
-
-    static decode(buffer: Uint8Array, offset: number): [Credential, number] {
-        const [[credentialType], offset1] = tlspl.decode(
-            [tlspl.decodeUint16], buffer, offset,
-        );
-        switch (credentialType) {
-            case CredentialType.Basic:
-            {
-                const [[basicCredential], offset2] = tlspl.decode(
-                    [BasicCredential.decode], buffer, offset1,
-                );
-                return [
-                    new Credential(CredentialType.Basic, basicCredential),
-                    offset2,
-                ];
-            }
-            default:
-                throw new Error("Unsupported credential type");
-        }
-    }
-    get encoder(): tlspl.Encoder {
-        return tlspl.struct([
-            tlspl.uint16(this.credentialType),
-            this.credential.encoder,
-        ]);
-    }
-}
+// FIXME: x509 certificate

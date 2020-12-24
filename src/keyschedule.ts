@@ -45,6 +45,7 @@ import {
 import {CipherSuite} from "./ciphersuite";
 import * as tlspl from "./tlspl";
 import {left, right, directPath, root} from "./treemath";
+import {GroupContext} from "./ratchettree";
 
 export async function expandWithLabel(
     cipherSuite: CipherSuite,
@@ -93,7 +94,7 @@ export async function generateSecrets(
     cipherSuite: CipherSuite,
     initSecret: Uint8Array,
     commitSecret: Uint8Array,
-    groupContext: Uint8Array,
+    groupContext: GroupContext,
     psk?: Uint8Array | undefined,
 ): Promise<Secrets> {
     const joinerSecret = await cipherSuite.hpke.kdf.extract(initSecret, commitSecret);
@@ -106,8 +107,8 @@ export async function generateSecretsFromJoinerSecret(
     cipherSuite: CipherSuite,
     joinerSecret: Uint8Array,
     commitSecret: Uint8Array,
-    groupContext: Uint8Array,
-    psk?: Uint8Array,
+    groupContext: GroupContext,
+    psk?: Uint8Array | undefined,
 ): Promise<Secrets> {
     if (psk === undefined) {
         psk = EMPTY_BYTE_ARRAY;
@@ -119,7 +120,7 @@ export async function generateSecretsFromJoinerSecret(
         cipherSuite,
         welcomeSecret,
         EPOCH,
-        groupContext,
+        tlspl.encode([groupContext.encoder]),
         cipherSuite.hpke.kdf.extractLength,
     );
 

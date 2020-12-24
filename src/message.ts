@@ -316,6 +316,21 @@ export class MLSPlaintext {
                 tlspl.uint8(0),
         ]);
     }
+    get commitContentEncoder(): tlspl.Encoder {
+        if (!(this.content instanceof Commit)) {
+            throw new Error("Not a commit message");
+        }
+        return tlspl.struct([
+            tlspl.variableOpaque(this.groupId, 1),
+            tlspl.uint64(this.epoch),
+            this.sender.encoder,
+            tlspl.uint8(this.contentType),
+            this.content instanceof Uint8Array ?
+                tlspl.variableOpaque(this.content, 4) :
+                this.content.encoder,
+            tlspl.variableOpaque(this.signature, 2),
+        ]);
+    }
 }
 
 export class MLSCiphertext {

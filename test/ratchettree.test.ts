@@ -16,11 +16,11 @@ limitations under the License.
 
 import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
 import {Ed25519} from "../src/signatures";
-import {BasicCredential, Credential} from "../src/credential";
-import {NodeData, RatchetTreeView} from "../src/ratchettree";
+import {BasicCredential} from "../src/credential";
+import {NodeData, RatchetTreeView, GroupContext} from "../src/ratchettree";
 import {Extension, KeyPackage} from "../src/keypackage";
 import {Add, Update, Remove} from "../src/message";
-import {ProtocolVersion, CredentialType} from "../src/constants";
+import {ProtocolVersion} from "../src/constants";
 import {stringToUint8Array} from "../src/util";
 import {Tree} from "../src/lbbtree";
 import * as tlspl from "../src/tlspl";
@@ -33,29 +33,20 @@ describe("Ratchet Tree", () => {
             await cipherSuite.signatureScheme.generateKeyPair();
         const [signingPrivKey2, signingPubKey2] =
             await cipherSuite.signatureScheme.generateKeyPair();
-        const credential0 = new Credential(
-            CredentialType.Basic,
-            new BasicCredential(
-                stringToUint8Array("@alice:example.org"),
-                cipherSuite.signatureSchemeId,
-                await signingPubKey0.serialize(),
-            ),
+        const credential0 = new BasicCredential(
+            stringToUint8Array("@alice:example.org"),
+            cipherSuite.signatureSchemeId,
+            await signingPubKey0.serialize(),
         );
-        const credential1 = new Credential(
-            CredentialType.Basic,
-            new BasicCredential(
-                stringToUint8Array("@bob:example.org"),
-                cipherSuite.signatureSchemeId,
-                await signingPubKey1.serialize(),
-            ),
+        const credential1 = new BasicCredential(
+            stringToUint8Array("@bob:example.org"),
+            cipherSuite.signatureSchemeId,
+            await signingPubKey1.serialize(),
         );
-        const credential2 = new Credential(
-            CredentialType.Basic,
-            new BasicCredential(
-                stringToUint8Array("@carol:example.org"),
-                cipherSuite.signatureSchemeId,
-                await signingPubKey1.serialize(),
-            ),
+        const credential2 = new BasicCredential(
+            stringToUint8Array("@carol:example.org"),
+            cipherSuite.signatureSchemeId,
+            await signingPubKey1.serialize(),
         );
 
         const [hpkePrivKey0, hpkePubKey0] =
@@ -102,10 +93,18 @@ describe("Ratchet Tree", () => {
             new NodeData(undefined, hpkePubKey4, [], credential2, undefined),
         ];
         nodes[3].unmergedLeaves.push(nodes[4]);
+        const groupContext = new GroupContext(
+            new Uint8Array(),
+            0,
+            new Uint8Array(),
+            new Uint8Array(),
+            [],
+        );
         const ratchetTreeView = new RatchetTreeView(
             cipherSuite, 0,
             new Tree<NodeData>(nodes),
             [keyPackage0, keyPackage1, keyPackage2],
+            groupContext,
         );
 
         const ratchetTreeExtension = await ratchetTreeView.toRatchetTreeExtension();
@@ -153,13 +152,10 @@ describe("Ratchet Tree", () => {
     it("should update path", async () => {
         const [signingPrivKey, signingPubKey] =
             await cipherSuite.signatureScheme.generateKeyPair();
-        const credential = new Credential(
-            CredentialType.Basic,
-            new BasicCredential(
-                stringToUint8Array("@alice:example.org"),
-                cipherSuite.signatureSchemeId,
-                await signingPubKey.serialize(),
-            ),
+        const credential = new BasicCredential(
+            stringToUint8Array("@alice:example.org"),
+            cipherSuite.signatureSchemeId,
+            await signingPubKey.serialize(),
         );
         async function makeKeyPackage(pubKey: Uint8Array): Promise<KeyPackage> {
             return await KeyPackage.create(
@@ -189,6 +185,13 @@ describe("Ratchet Tree", () => {
         //  / \   \
         // 0   2   4
 
+        const groupContext = new GroupContext(
+            new Uint8Array(),
+            0,
+            new Uint8Array(),
+            new Uint8Array(),
+            [],
+        );
         const ratchetTreeView0v0 = new RatchetTreeView(
             cipherSuite, 0,
             new Tree<NodeData>([
@@ -199,6 +202,7 @@ describe("Ratchet Tree", () => {
                 new NodeData(undefined, hpkePubKey4, [], undefined, undefined),
             ]),
             new Array(3),
+            groupContext,
         );
         const ratchetTreeView1v0 = new RatchetTreeView(
             cipherSuite, 1,
@@ -210,6 +214,7 @@ describe("Ratchet Tree", () => {
                 new NodeData(undefined, hpkePubKey4, [], undefined, undefined),
             ]),
             new Array(3),
+            groupContext,
         );
         const ratchetTreeView2v0 = new RatchetTreeView(
             cipherSuite, 2,
@@ -221,6 +226,7 @@ describe("Ratchet Tree", () => {
                 new NodeData(hpkePrivKey4, hpkePubKey4, [], undefined, undefined),
             ]),
             new Array(3),
+            groupContext,
         );
 
         const [updatePath, commitSecret1, ratchetTreeView1v1] = await ratchetTreeView1v0.update(makeKeyPackage);
@@ -240,49 +246,34 @@ describe("Ratchet Tree", () => {
 
     it("should remove, update, and add", async () => {
         const [, signingPubKeyA] = await cipherSuite.signatureScheme.generateKeyPair();
-        const credentialA = new Credential(
-            CredentialType.Basic,
-            new BasicCredential(
-                stringToUint8Array("@alice:example.org"),
-                cipherSuite.SignatureSchemeId,
-                await signingPubKeyA.serialize(),
-            ),
+        const credentialA = new BasicCredential(
+            stringToUint8Array("@alice:example.org"),
+            cipherSuite.SignatureSchemeId,
+            await signingPubKeyA.serialize(),
         );
         const [signingPrivKeyB, signingPubKeyB] = await Ed25519.generateKeyPair();
-        const credentialB = new Credential(
-            CredentialType.Basic,
-            new BasicCredential(
-                stringToUint8Array("@bob:example.org"),
-                cipherSuite.SignatureSchemeId,
-                await signingPubKeyB.serialize(),
-            ),
+        const credentialB = new BasicCredential(
+            stringToUint8Array("@bob:example.org"),
+            cipherSuite.SignatureSchemeId,
+            await signingPubKeyB.serialize(),
         );
         const [, signingPubKeyC] = await Ed25519.generateKeyPair();
-        const credentialC = new Credential(
-            CredentialType.Basic,
-            new BasicCredential(
-                stringToUint8Array("@carol:example.org"),
-                cipherSuite.SignatureSchemeId,
-                await signingPubKeyC.serialize(),
-            ),
+        const credentialC = new BasicCredential(
+            stringToUint8Array("@carol:example.org"),
+            cipherSuite.SignatureSchemeId,
+            await signingPubKeyC.serialize(),
         );
         const [signingPrivKeyD, signingPubKeyD] = await Ed25519.generateKeyPair();
-        const credentialD = new Credential(
-            CredentialType.Basic,
-            new BasicCredential(
-                stringToUint8Array("@dave:example.org"),
-                cipherSuite.SignatureSchemeId,
-                await signingPubKeyD.serialize(),
-            ),
+        const credentialD = new BasicCredential(
+            stringToUint8Array("@dave:example.org"),
+            cipherSuite.SignatureSchemeId,
+            await signingPubKeyD.serialize(),
         );
         const [signingPrivKeyE, signingPubKeyE] = await Ed25519.generateKeyPair();
-        const credentialE = new Credential(
-            CredentialType.Basic,
-            new BasicCredential(
-                stringToUint8Array("@emma:example.org"),
-                cipherSuite.SignatureSchemeId,
-                await signingPubKeyE.serialize(),
-            ),
+        const credentialE = new BasicCredential(
+            stringToUint8Array("@emma:example.org"),
+            cipherSuite.SignatureSchemeId,
+            await signingPubKeyE.serialize(),
         );
 
         const [hpkePrivKey0, hpkePubKey0] =
@@ -302,6 +293,13 @@ describe("Ratchet Tree", () => {
         //  / \   \
         // 0   2   4
 
+        const groupContext = new GroupContext(
+            new Uint8Array(),
+            0,
+            new Uint8Array(),
+            new Uint8Array(),
+            [],
+        );
         const ratchetTreeView0v0 = new RatchetTreeView(
             cipherSuite, 0,
             new Tree<NodeData>([
@@ -312,6 +310,7 @@ describe("Ratchet Tree", () => {
                 new NodeData(undefined, hpkePubKey4, [], credentialC, undefined),
             ]),
             new Array(3),
+            groupContext,
         );
         const ratchetTreeView1v0 = new RatchetTreeView(
             cipherSuite, 1,
@@ -323,6 +322,7 @@ describe("Ratchet Tree", () => {
                 new NodeData(undefined, hpkePubKey4, [], credentialC, undefined),
             ]),
             new Array(3),
+            groupContext,
         );
         const ratchetTreeView2v0 = new RatchetTreeView(
             cipherSuite, 2,
@@ -334,6 +334,7 @@ describe("Ratchet Tree", () => {
                 new NodeData(hpkePrivKey4, hpkePubKey4, [], credentialC, undefined),
             ]),
             new Array(3),
+            groupContext,
         );
 
         const [, hpkePubKey2v1] = await cipherSuite.hpke.kem.generateKeyPair();

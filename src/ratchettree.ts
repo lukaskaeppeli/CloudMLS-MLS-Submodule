@@ -15,14 +15,24 @@ limitations under the License.
 */
 
 import {EMPTY_BYTE_ARRAY, NODE, PATH, ProposalType} from "./constants";
-import {eqUint8Array} from "./util";
-import {Leaf, Node, Tree} from "./lbbtree";
+import {concatUint8Array, eqUint8Array} from "./util";
+import {Leaf, Internal, Node, Tree} from "./lbbtree";
+import * as treemath from "./treemath";
 import {Extension, ParentNode, RatchetTree, KeyPackage} from "./keypackage";
 import {KEMPrivateKey, KEMPublicKey} from "./hpke/base";
 import {CipherSuite} from "./ciphersuite";
 import {deriveSecret} from "./keyschedule";
 import {Credential} from "./credential";
-import {HPKECiphertext, UpdatePathNode, UpdatePath, Add, Update, Remove, Proposal} from "./message";
+import {
+    HPKECiphertext,
+    MLSPlaintext,
+    UpdatePathNode,
+    UpdatePath,
+    Add,
+    Update,
+    Remove,
+    Proposal,
+} from "./message";
 import * as tlspl from "./tlspl";
 
 /** The ratchet tree allows group members to efficiently update the group secrets.
@@ -78,13 +88,18 @@ export class RatchetTreeView {
     // NOTE: we assume that the identity in each credential is unique
     readonly idToLeafNum: Map<string, number>;
     readonly emptyLeaves: number[];
+    readonly parentNodes: Record<number, [ParentNode, Uint8Array]>;
+    readonly nodeHashes: Record<number, Uint8Array>;
     constructor(
         readonly cipherSuite: CipherSuite,
         readonly leafNum: number,
         readonly tree: Tree<NodeData>,
         readonly keyPackages: (KeyPackage | undefined)[],
+        readonly groupContext: GroupContext,
         idToLeafNum?: Map<string, number>,
         emptyLeaves?: number[],
+        parentNodes?: Record<number, [ParentNode, Uint8Array]>,
+        nodeHashes?: Record<number, Uint8Array>,
     ) {
         this.idToLeafNum = idToLeafNum || new Map(
             [...tree]
@@ -92,7 +107,7 @@ export class RatchetTreeView {
                 .map((val, idx): [string, number] => {
                     if (val.credential) {
                         // FIXME: do something better than toString?
-                        return [val.credential.credential.identity.toString(), idx];
+                        return [val.credential.identity.toString(), idx];
                     } else {
                         return undefined;
                     }
@@ -105,35 +120,68 @@ export class RatchetTreeView {
                 .map((val, idx): [NodeData, number] => [val, idx])
                 .filter(v => v[0].publicKey === undefined)
                 .map(v => v[1]);
+        this.parentNodes = parentNodes || {};
+        this.nodeHashes = nodeHashes || {};
     }
 
     async toRatchetTreeExtension(): Promise<RatchetTree> {
-        const treeNodes: NodeData[] = [...this.tree]; // FIXME: O(n)
         const nodes: Array<KeyPackage | ParentNode | undefined> =
-            await Promise.all(treeNodes.map(async (treeNode, i) => {
-                if (treeNode.publicKey) {
-                    if (i & 0x1) {
-                        return new ParentNode(
-                            await treeNode.publicKey.serialize(),
-                            treeNode.unmergedLeaves.map((data: NodeData) => {
-                                const identity = data.credential.credential.identity.toString();
-                                return this.idToLeafNum.get(identity);
-                            }),
-                            new Uint8Array(), // FIXME: parentHash
-                        );
-                    } else {
-                        return this.keyPackages[i / 2];
-                    }
+            new Array(this.tree.size * 2 - 1);
+
+        const createNode = async (
+            nodeNum: number, parentHash: Uint8Array, node: Node<NodeData>,
+        ) => {
+            const data = node.data;
+            if (nodeNum & 0x1) { // internal node
+                if (nodeNum in this.parentNodes) {
+                    const [parentNode, newParentHash] = this.parentNodes[nodeNum];
+                    nodes[nodeNum] = parentNode;
+                    await Promise.all([
+                        createNode(
+                            treemath.left(nodeNum),
+                            newParentHash, (node as Internal<NodeData>).leftChild,
+                        ),
+                        createNode(
+                            treemath.right(nodeNum, this.tree.size),
+                            newParentHash, (node as Internal<NodeData>).rightChild,
+                        ),
+                    ]);
                 } else {
-                    return undefined;
+                    const parentNode = nodes[nodeNum] = new ParentNode(
+                        data.publicKey ? await data.publicKey.serialize() : EMPTY_BYTE_ARRAY,
+                        data.unmergedLeaves.map((data: NodeData) => {
+                            const identity = data.credential.identity.toString();
+                            return this.idToLeafNum.get(identity);
+                        }),
+                        parentHash,
+                    );
+                    const newParentHash = await this.cipherSuite.hash.hash(
+                        tlspl.encode([parentNode.encoder]),
+                    );
+                    this.parentNodes[nodeNum] = [parentNode, newParentHash];
+                    await Promise.all([
+                        createNode(
+                            treemath.left(nodeNum),
+                            newParentHash, (node as Internal<NodeData>).leftChild,
+                        ),
+                        createNode(
+                            treemath.right(nodeNum, this.tree.size),
+                            newParentHash, (node as Internal<NodeData>).rightChild,
+                        ),
+                    ]);
                 }
-            }));
+            } else { // leaf node
+                nodes[nodeNum] = this.keyPackages[nodeNum / 2];
+            }
+        }
+
+        await createNode(treemath.root(this.tree.size), EMPTY_BYTE_ARRAY, this.tree.root);
         return new RatchetTree(nodes);
     }
     static async fromRatchetTreeExtension(
         cipherSuite: CipherSuite, ext: RatchetTree, keyPackage: KeyPackage, secretKey: KEMPrivateKey,
     ): Promise<RatchetTreeView> {
-        const ourIdentity = keyPackage.credential.credential.identity;
+        const ourIdentity = keyPackage.credential.identity;
         let leafNum: number | undefined = undefined;
         const nodes: NodeData[] = new Array(ext.nodes.length);
         const keyPackages: (KeyPackage | undefined)[] = [];
@@ -151,8 +199,9 @@ export class RatchetTreeView {
                 if (!(node instanceof KeyPackage)) {
                     throw new Error(`Expected a key package at position ${i}`);
                 }
+                // FIXME: check parent hash if such an extension exists
                 keyPackages.push(node);
-                if (eqUint8Array(node.credential.credential.identity, ourIdentity)) {
+                if (eqUint8Array(node.credential.identity, ourIdentity)) {
                     leafNum = i / 2;
                 }
                 nodes[i] = new NodeData(
@@ -162,7 +211,7 @@ export class RatchetTreeView {
                     node.credential,
                     undefined,
                 );
-                idToLeafNum.set(node.credential.credential.identity.toString(), i / 2);
+                idToLeafNum.set(node.credential.identity.toString(), i / 2);
             }
         }
         // next process the internal nodes
@@ -175,13 +224,23 @@ export class RatchetTreeView {
                     throw new Error(`Expected a parent node at position ${i}`);
                 }
                 // FIXME: check parentHash
-                nodes[i] = new NodeData(
-                    undefined,
-                    await node.getHpkeKey(cipherSuite),
-                    node.unmergedLeaves.map(leafNum => nodes[leafNum * 2]),
-                    undefined,
-                    undefined,
-                );
+                if (node.publicKey.length === 0) {
+                    nodes[i] = new NodeData(
+                        undefined,
+                        undefined,
+                        node.unmergedLeaves.map(leafNum => nodes[leafNum * 2]),
+                        undefined,
+                        undefined,
+                    );
+                } else {
+                    nodes[i] = new NodeData(
+                        undefined,
+                        await node.getHpkeKey(cipherSuite),
+                        node.unmergedLeaves.map(leafNum => nodes[leafNum * 2]),
+                        undefined,
+                        undefined,
+                    );
+                }
             }
         }
 
@@ -194,6 +253,13 @@ export class RatchetTreeView {
             leafNum,
             new Tree(nodes),
             keyPackages,
+            new GroupContext( // FIXME:
+                new Uint8Array(),
+                0,
+                new Uint8Array(),
+                new Uint8Array(),
+                [],
+            ),
             idToLeafNum,
             emptyLeaves,
         )
@@ -247,7 +313,7 @@ export class RatchetTreeView {
                 encryptedPathSecret.push(await HPKECiphertext.encrypt(
                     this.cipherSuite.hpke,
                     nodeData.publicKey,
-                    EMPTY_BYTE_ARRAY, // FIXME: group context,
+                    tlspl.encode([this.groupContext.encoder]),
                     currPathSecret,
                 ));
             }
@@ -268,7 +334,13 @@ export class RatchetTreeView {
         return [
             updatePath,
             await deriveSecret(this.cipherSuite, currPathSecret, PATH),
-            new RatchetTreeView(this.cipherSuite, this.leafNum, newTree, keyPackages),
+            new RatchetTreeView(
+                this.cipherSuite,
+                this.leafNum,
+                newTree,
+                keyPackages,
+                this.groupContext, // FIXME:
+            ),
         ];
     }
 
@@ -313,7 +385,7 @@ export class RatchetTreeView {
                 try {
                     currPathSecret = await encryptedPathSecret.decrypt(
                         this.cipherSuite.hpke, key,
-                        EMPTY_BYTE_ARRAY, // FIXME: group context,
+                        tlspl.encode([this.groupContext.encoder]),
                     );
                     break;
                 } catch (e) {}
@@ -363,6 +435,7 @@ export class RatchetTreeView {
                 this.leafNum,
                 newTree,
                 keyPackages,
+                this.groupContext, // FIXME:
                 this.idToLeafNum,
                 this.emptyLeaves,
             ),
@@ -401,7 +474,7 @@ export class RatchetTreeView {
             for (const remove of removes) {
                 const path = [...tree.pathToLeafNum(remove.removed)];
 
-                idToLeafNum.delete(path[path.length - 1].credential.credential.identity.toString());
+                idToLeafNum.delete(path[path.length - 1].credential.identity.toString());
                 emptyLeaves.push(remove.removed);
                 keyPackages[remove.removed] = undefined;
 
@@ -420,7 +493,7 @@ export class RatchetTreeView {
         }
 
         for (const update of updates) {
-            const leafNum = this.idToLeafNum.get(update.keyPackage.credential.credential.identity.toString());
+            const leafNum = this.idToLeafNum.get(update.keyPackage.credential.identity.toString());
             // FIXME: make sure the update's credential matches the credential
             // we already have
             keyPackages[leafNum] = update.keyPackage;
@@ -482,7 +555,7 @@ export class RatchetTreeView {
                             }
                         });
                     tree = tree.replacePathToLeaf(leafNum, path);
-                    idToLeafNum.set(add.keyPackage.credential.credential.identity.toString(), leafNum);
+                    idToLeafNum.set(add.keyPackage.credential.identity.toString(), leafNum);
                 } else {
                     const leafNum = tree.size;
                     keyPackages[leafNum] = add.keyPackage;
@@ -498,7 +571,7 @@ export class RatchetTreeView {
                             );
                         },
                     );
-                    idToLeafNum.set(add.keyPackage.credential.credential.identity.toString(), leafNum);
+                    idToLeafNum.set(add.keyPackage.credential.identity.toString(), leafNum);
                 }
             }
         }
@@ -508,9 +581,78 @@ export class RatchetTreeView {
             this.leafNum,
             tree,
             keyPackages,
+            this.groupContext, // FIXME:
             idToLeafNum,
             emptyLeaves,
         );
+    }
+
+    // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#parent-hash
+    async calculateParentHashForLeaf(leafNum: number): Promise<Uint8Array> {
+        const path = [...this.tree.pathToLeafNum(leafNum)];
+        path.pop(); // stop before the KeyPackage
+        let parentHash = EMPTY_BYTE_ARRAY; // parentHash for root is the empty string
+
+        for (const node of path) {
+            const parentNode = new ParentNode(
+                node.publicKey ? await node.publicKey.serialize() : EMPTY_BYTE_ARRAY,
+                node.unmergedLeaves.map((data: NodeData) => {
+                    const identity = data.credential.identity.toString();
+                    return this.idToLeafNum.get(identity);
+                }),
+                parentHash,
+            );
+            const encoding = tlspl.encode([parentNode.encoder]);
+            parentHash = await this.cipherSuite.hash.hash(encoding);
+        }
+
+        return parentHash;
+    }
+
+    // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#tree-hashes
+    async calculateTreeHash(): Promise<Uint8Array> {
+        // the ratchet tree extension gives us ParentNode structs
+        const ratchetTree = await this.toRatchetTreeExtension();
+        const nodes = ratchetTree.nodes;
+
+        const calculateNodeHash = async (
+            nodeNum: number, node: Node<NodeData>,
+        ): Promise<Uint8Array> => {
+            if (!(nodeNum in this.nodeHashes)) {
+                if (nodeNum & 0x1) { // internal node
+                    this.nodeHashes[nodeNum] = tlspl.encode([
+                        tlspl.uint32(nodeNum),
+                        nodes[nodeNum] && ((nodes[nodeNum] as ParentNode).publicKey.length > 0) ?
+                            tlspl.struct([tlspl.uint8(1), (nodes[nodeNum] as ParentNode).encoder]) :
+                            tlspl.uint8(0),
+                        tlspl.variableOpaque(
+                            await calculateNodeHash(
+                                treemath.left(nodeNum),
+                                (node as Internal<NodeData>).leftChild,
+                            ),
+                            1,
+                        ),
+                        tlspl.variableOpaque(
+                            await calculateNodeHash(
+                                treemath.right(nodeNum, this.tree.size),
+                                (node as Internal<NodeData>).rightChild,
+                            ),
+                            1,
+                        ),
+                    ]); // ParentNodeHashInput struct
+                } else { // leaf node
+                    this.nodeHashes[nodeNum] = tlspl.encode([
+                        tlspl.uint32(nodeNum),
+                        nodes[nodeNum] ?
+                            tlspl.struct([tlspl.uint8(1), (nodes[nodeNum] as KeyPackage).encoder]) :
+                            tlspl.uint8(0),
+                    ]); // LeafNodeHashInput struct
+                }
+            }
+            return this.nodeHashes[nodeNum];
+        }
+
+        return await calculateNodeHash(treemath.root(this.tree.size), this.tree.root);
     }
 }
 
@@ -555,4 +697,17 @@ export class GroupContext {
     }
 }
 
-// FIXME: add function to calculate confirmed transcript hash
+export async function calculateConfirmedTranscriptHash(
+    cipherSuite: CipherSuite,
+    plaintext: MLSPlaintext,
+    interimTranscriptHash: Uint8Array,
+): Promise<[Uint8Array, Uint8Array]> {
+    const mlsPlaintextCommitContent = tlspl.encode([plaintext.commitContentEncoder]);
+    const confirmedTranscriptHash = await cipherSuite.hash.hash(
+        concatUint8Array([interimTranscriptHash, mlsPlaintextCommitContent]),
+    );
+    const newInterimTranscriptHash = await cipherSuite.hash.hash(
+        concatUint8Array([confirmedTranscriptHash, plaintext.confirmationTag]),
+    );
+    return [confirmedTranscriptHash, newInterimTranscriptHash];
+}

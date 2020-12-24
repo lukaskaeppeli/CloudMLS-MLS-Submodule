@@ -15,10 +15,10 @@ limitations under the License.
 */
 
 import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
-import {BasicCredential, Credential} from "../src/credential";
+import {BasicCredential} from "../src/credential";
 import {KeyPackage} from "../src/keypackage";
 import {HPKECiphertext} from "../src/message";
-import {SignatureScheme, ProtocolVersion, CredentialType} from "../src/constants";
+import {SignatureScheme, ProtocolVersion} from "../src/constants";
 import {stringToUint8Array} from "../src/util";
 import * as tlspl from "../src/tlspl";
 
@@ -27,13 +27,10 @@ describe("key package", () => {
         const [signingPrivKey, signingPubKey] =
             await cipherSuite.signatureScheme.generateKeyPair();
 
-        const credential = new Credential(
-            CredentialType.Basic,
-            new BasicCredential(
-                stringToUint8Array("@alice:example.org"),
-                SignatureScheme.ed25519,
-                await signingPubKey.serialize(),
-            ),
+        const credential = new BasicCredential(
+            stringToUint8Array("@alice:example.org"),
+            SignatureScheme.ed25519,
+            await signingPubKey.serialize(),
         );
 
         const [, hpkePubKey] =
@@ -67,13 +64,10 @@ describe("key package", () => {
         const [signingPrivKey, signingPubKey] =
             await cipherSuite.signatureScheme.generateKeyPair();
 
-        const credential = new Credential(
-            CredentialType.Basic,
-            new BasicCredential(
-                stringToUint8Array("@alice:example.org"),
-                SignatureScheme.ed25519,
-                await signingPubKey.serialize(),
-            ),
+        const credential = new BasicCredential(
+            stringToUint8Array("@alice:example.org"),
+            SignatureScheme.ed25519,
+            await signingPubKey.serialize(),
         );
 
         const [hpkePrivKey, hpkePubKey] =
