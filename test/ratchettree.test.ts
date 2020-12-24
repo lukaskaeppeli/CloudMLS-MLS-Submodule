@@ -15,7 +15,6 @@ limitations under the License.
 */
 
 import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
-import {Ed25519} from "../src/signatures";
 import {BasicCredential} from "../src/credential";
 import {NodeData, RatchetTreeView, GroupContext} from "../src/ratchettree";
 import {Extension, KeyPackage} from "../src/keypackage";
@@ -89,10 +88,9 @@ describe("Ratchet Tree", () => {
             new NodeData(hpkePrivKey0, hpkePubKey0, [], credential0, undefined),
             new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, undefined),
             new NodeData(undefined, hpkePubKey2, [], credential1, undefined),
-            new NodeData(undefined, hpkePubKey3, [], undefined, undefined),
+            new NodeData(undefined, hpkePubKey3, [4], undefined, undefined),
             new NodeData(undefined, hpkePubKey4, [], credential2, undefined),
         ];
-        nodes[3].unmergedLeaves.push(nodes[4]);
         const groupContext = new GroupContext(
             new Uint8Array(),
             0,
@@ -139,7 +137,7 @@ describe("Ratchet Tree", () => {
         expect(decodedTreeNodes[3].privateKey).toEqual(undefined);
         expect(await decodedTreeNodes[3].publicKey.serialize())
             .toEqual(await hpkePubKey3.serialize());
-        expect(decodedTreeNodes[3].unmergedLeaves).toEqual([decodedTreeNodes[4]]);
+        expect(decodedTreeNodes[3].unmergedLeaves).toEqual([4]);
         expect(decodedTreeNodes[3].credential).toEqual(undefined);
 
         expect(decodedTreeNodes[4].privateKey).toEqual(undefined);
@@ -150,21 +148,35 @@ describe("Ratchet Tree", () => {
     });
 
     it("should update path", async () => {
-        const [signingPrivKey, signingPubKey] =
+        const [signingPrivKey0, signingPubKey0] =
             await cipherSuite.signatureScheme.generateKeyPair();
-        const credential = new BasicCredential(
+        const [signingPrivKey1, signingPubKey1] =
+            await cipherSuite.signatureScheme.generateKeyPair();
+        const [signingPrivKey2, signingPubKey2] =
+            await cipherSuite.signatureScheme.generateKeyPair();
+        const credential0 = new BasicCredential(
             stringToUint8Array("@alice:example.org"),
             cipherSuite.signatureSchemeId,
-            await signingPubKey.serialize(),
+            await signingPubKey0.serialize(),
+        );
+        const credential1 = new BasicCredential(
+            stringToUint8Array("@bob:example.org"),
+            cipherSuite.signatureSchemeId,
+            await signingPubKey1.serialize(),
+        );
+        const credential2 = new BasicCredential(
+            stringToUint8Array("@carol:example.org"),
+            cipherSuite.signatureSchemeId,
+            await signingPubKey1.serialize(),
         );
         async function makeKeyPackage(pubKey: Uint8Array): Promise<KeyPackage> {
             return await KeyPackage.create(
                 ProtocolVersion.Mls10,
                 cipherSuite,
                 pubKey,
-                credential,
+                credential0,
                 [],
-                signingPrivKey,
+                signingPrivKey0,
             );
         }
 
@@ -185,6 +197,31 @@ describe("Ratchet Tree", () => {
         //  / \   \
         // 0   2   4
 
+        const keyPackage0 = await KeyPackage.create(
+            ProtocolVersion.Mls10,
+            cipherSuite,
+            await hpkePubKey0.serialize(),
+            credential0,
+            [],
+            signingPrivKey0,
+        );
+        const keyPackage1 = await KeyPackage.create(
+            ProtocolVersion.Mls10,
+            cipherSuite,
+            await hpkePubKey2.serialize(),
+            credential1,
+            [],
+            signingPrivKey1,
+        );
+        const keyPackage2 = await KeyPackage.create(
+            ProtocolVersion.Mls10,
+            cipherSuite,
+            await hpkePubKey4.serialize(),
+            credential2,
+            [],
+            signingPrivKey2,
+        );
+        const keyPackages = [keyPackage0, keyPackage1, keyPackage2];
         const groupContext = new GroupContext(
             new Uint8Array(),
             0,
@@ -201,7 +238,7 @@ describe("Ratchet Tree", () => {
                 new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, undefined),
                 new NodeData(undefined, hpkePubKey4, [], undefined, undefined),
             ]),
-            new Array(3),
+            keyPackages,
             groupContext,
         );
         const ratchetTreeView1v0 = new RatchetTreeView(
@@ -213,7 +250,7 @@ describe("Ratchet Tree", () => {
                 new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, undefined),
                 new NodeData(undefined, hpkePubKey4, [], undefined, undefined),
             ]),
-            new Array(3),
+            keyPackages,
             groupContext,
         );
         const ratchetTreeView2v0 = new RatchetTreeView(
@@ -225,7 +262,7 @@ describe("Ratchet Tree", () => {
                 new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, undefined),
                 new NodeData(hpkePrivKey4, hpkePubKey4, [], undefined, undefined),
             ]),
-            new Array(3),
+            keyPackages,
             groupContext,
         );
 
@@ -245,31 +282,36 @@ describe("Ratchet Tree", () => {
     });
 
     it("should remove, update, and add", async () => {
-        const [, signingPubKeyA] = await cipherSuite.signatureScheme.generateKeyPair();
+        const [signingPrivKeyA, signingPubKeyA]
+            = await cipherSuite.signatureScheme.generateKeyPair();
         const credentialA = new BasicCredential(
             stringToUint8Array("@alice:example.org"),
             cipherSuite.SignatureSchemeId,
             await signingPubKeyA.serialize(),
         );
-        const [signingPrivKeyB, signingPubKeyB] = await Ed25519.generateKeyPair();
+        const [signingPrivKeyB, signingPubKeyB]
+            = await cipherSuite.signatureScheme.generateKeyPair();
         const credentialB = new BasicCredential(
             stringToUint8Array("@bob:example.org"),
             cipherSuite.SignatureSchemeId,
             await signingPubKeyB.serialize(),
         );
-        const [, signingPubKeyC] = await Ed25519.generateKeyPair();
+        const [signingPrivKeyC, signingPubKeyC]
+            = await cipherSuite.signatureScheme.generateKeyPair();
         const credentialC = new BasicCredential(
             stringToUint8Array("@carol:example.org"),
             cipherSuite.SignatureSchemeId,
             await signingPubKeyC.serialize(),
         );
-        const [signingPrivKeyD, signingPubKeyD] = await Ed25519.generateKeyPair();
+        const [signingPrivKeyD, signingPubKeyD] =
+            await cipherSuite.signatureScheme.generateKeyPair();
         const credentialD = new BasicCredential(
             stringToUint8Array("@dave:example.org"),
             cipherSuite.SignatureSchemeId,
             await signingPubKeyD.serialize(),
         );
-        const [signingPrivKeyE, signingPubKeyE] = await Ed25519.generateKeyPair();
+        const [signingPrivKeyE, signingPubKeyE] =
+            await cipherSuite.signatureScheme.generateKeyPair();
         const credentialE = new BasicCredential(
             stringToUint8Array("@emma:example.org"),
             cipherSuite.SignatureSchemeId,
@@ -293,6 +335,31 @@ describe("Ratchet Tree", () => {
         //  / \   \
         // 0   2   4
 
+        const keyPackageA = await KeyPackage.create(
+            ProtocolVersion.Mls10,
+            cipherSuite,
+            await hpkePubKey0.serialize(),
+            credentialA,
+            [],
+            signingPrivKeyA,
+        );
+        const keyPackageB = await KeyPackage.create(
+            ProtocolVersion.Mls10,
+            cipherSuite,
+            await hpkePubKey2.serialize(),
+            credentialB,
+            [],
+            signingPrivKeyB,
+        );
+        const keyPackageC = await KeyPackage.create(
+            ProtocolVersion.Mls10,
+            cipherSuite,
+            await hpkePubKey4.serialize(),
+            credentialC,
+            [],
+            signingPrivKeyC,
+        );
+        const keyPackages = [keyPackageA, keyPackageB, keyPackageC];
         const groupContext = new GroupContext(
             new Uint8Array(),
             0,
@@ -309,7 +376,7 @@ describe("Ratchet Tree", () => {
                 new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, undefined),
                 new NodeData(undefined, hpkePubKey4, [], credentialC, undefined),
             ]),
-            new Array(3),
+            keyPackages,
             groupContext,
         );
         const ratchetTreeView1v0 = new RatchetTreeView(
@@ -321,7 +388,7 @@ describe("Ratchet Tree", () => {
                 new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, undefined),
                 new NodeData(undefined, hpkePubKey4, [], credentialC, undefined),
             ]),
-            new Array(3),
+            keyPackages,
             groupContext,
         );
         const ratchetTreeView2v0 = new RatchetTreeView(
@@ -333,7 +400,7 @@ describe("Ratchet Tree", () => {
                 new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, undefined),
                 new NodeData(hpkePrivKey4, hpkePubKey4, [], credentialC, undefined),
             ]),
-            new Array(3),
+            keyPackages,
             groupContext,
         );
 
@@ -384,7 +451,7 @@ describe("Ratchet Tree", () => {
         expect(nodes[1]).toEqual(new NodeData(
             undefined,
             undefined,
-            [nodes[2], nodes[0]],
+            [1, 0],
             undefined,
             undefined,
         ));
@@ -394,7 +461,7 @@ describe("Ratchet Tree", () => {
         expect(nodes[3]).toEqual(new NodeData(
             undefined,
             undefined,
-            [nodes[2], nodes[0], nodes[6]],
+            [1, 0, 3],
             undefined,
             undefined,
         ));
@@ -408,7 +475,7 @@ describe("Ratchet Tree", () => {
         expect(nodes[5]).toEqual(new NodeData(
             undefined,
             undefined,
-            [nodes[6]],
+            [3],
             undefined,
             undefined,
         ));

@@ -54,7 +54,7 @@ export class NodeData {
     constructor(
         public privateKey: KEMPrivateKey | undefined,
         public publicKey: KEMPublicKey | undefined,
-        public unmergedLeaves: NodeData[],
+        public unmergedLeaves: number[],
         public credential: Credential | undefined,
         public parentHash: Uint8Array | undefined,
     ) {}
@@ -70,13 +70,28 @@ export class NodeData {
  *   the resolution of its left child with the resolution of its right child,
  *   in that order
  */
-function resolutionOf(node: Node<NodeData>): NodeData[] {
+async function resolutionOf(
+    node: Node<NodeData>,
+    keyPackages: KeyPackage[],
+    omitLeaves?: Set<number>,
+): Promise<KEMPublicKey[]> {
+    if (omitLeaves === undefined) {
+        omitLeaves = new Set();
+    }
+    // FIXME: return empty if the node belongs to a leaf that should be omitted
     if (node.data !== undefined) {
-        return [node.data].concat(node.data.unmergedLeaves);
+        const ret = [node.data.publicKey];
+        for (const leafNum of node.data.unmergedLeaves) {
+            if (!omitLeaves.has(leafNum)) {
+                ret.push(await keyPackages[leafNum].getHpkeKey());
+            }
+        }
+        return ret;
     } else if (node instanceof Leaf) {
         return []
     } else {
-        return resolutionOf(node.leftChild).concat(resolutionOf(node.rightChild));
+        return (await resolutionOf(node.leftChild, keyPackages, omitLeaves))
+            .concat(await resolutionOf(node.rightChild, keyPackages, omitLeaves));
     }
 }
 
@@ -149,10 +164,7 @@ export class RatchetTreeView {
                 } else {
                     const parentNode = nodes[nodeNum] = new ParentNode(
                         data.publicKey ? await data.publicKey.serialize() : EMPTY_BYTE_ARRAY,
-                        data.unmergedLeaves.map((data: NodeData) => {
-                            const identity = data.credential.identity.toString();
-                            return this.idToLeafNum.get(identity);
-                        }),
+                        data.unmergedLeaves,
                         parentHash,
                     );
                     const newParentHash = await this.cipherSuite.hash.hash(
@@ -228,7 +240,7 @@ export class RatchetTreeView {
                     nodes[i] = new NodeData(
                         undefined,
                         undefined,
-                        node.unmergedLeaves.map(leafNum => nodes[leafNum * 2]),
+                        node.unmergedLeaves,
                         undefined,
                         undefined,
                     );
@@ -236,7 +248,7 @@ export class RatchetTreeView {
                     nodes[i] = new NodeData(
                         undefined,
                         await node.getHpkeKey(cipherSuite),
-                        node.unmergedLeaves.map(leafNum => nodes[leafNum * 2]),
+                        node.unmergedLeaves,
                         undefined,
                         undefined,
                     );
@@ -290,6 +302,7 @@ export class RatchetTreeView {
 
         let currPathSecret: Uint8Array = leafSecret;
 
+        const context = tlspl.encode([this.groupContext.encoder]);
         for (let i = 0; i < n; i++) {
             // derive secrets for this node
             currPathSecret = await deriveSecret(this.cipherSuite, currPathSecret, PATH);
@@ -306,14 +319,14 @@ export class RatchetTreeView {
 
             const encryptedPathSecret: HPKECiphertext[] = [];
             // encrypt the path secret for users under the copath
-            for (const nodeData of resolutionOf(copath[i])) {
+            for (const publicKey of await resolutionOf(copath[i], this.keyPackages)) {
                 // FIXME: "For each UpdatePathNode, the resolution of the
                 // corresponding copath node MUST be filtered by removing all
                 // new leaf nodes added as part of this MLS Commit message."
                 encryptedPathSecret.push(await HPKECiphertext.encrypt(
                     this.cipherSuite.hpke,
-                    nodeData.publicKey,
-                    tlspl.encode([this.groupContext.encoder]),
+                    publicKey,
+                    context,
                     currPathSecret,
                 ));
             }
@@ -513,7 +526,7 @@ export class RatchetTreeView {
                         return new NodeData(
                             undefined,
                             undefined,
-                            data.unmergedLeaves.concat([leafData]), // FIXME: ???
+                            data.unmergedLeaves.concat([leafNum]), // FIXME: ???
                             undefined,
                             undefined, // FIXME:
                         );
@@ -548,7 +561,7 @@ export class RatchetTreeView {
                                 return new NodeData(
                                     undefined,
                                     undefined,
-                                    data.unmergedLeaves.concat([leafData]), // FIXME: ???
+                                    data.unmergedLeaves.concat([leafNum]), // FIXME: ???
                                     undefined,
                                     undefined, // FIXME:
                                 );
@@ -565,7 +578,7 @@ export class RatchetTreeView {
                             return new NodeData(
                                 undefined,
                                 undefined,
-                                leftChild.data.unmergedLeaves.concat([leafData]), // FIXME: ???
+                                leftChild.data.unmergedLeaves.concat([leafNum]), // FIXME: ???
                                 undefined,
                                 undefined, // FIXME:
                             );
@@ -596,10 +609,7 @@ export class RatchetTreeView {
         for (const node of path) {
             const parentNode = new ParentNode(
                 node.publicKey ? await node.publicKey.serialize() : EMPTY_BYTE_ARRAY,
-                node.unmergedLeaves.map((data: NodeData) => {
-                    const identity = data.credential.identity.toString();
-                    return this.idToLeafNum.get(identity);
-                }),
+                node.unmergedLeaves,
                 parentHash,
             );
             const encoding = tlspl.encode([parentNode.encoder]);
