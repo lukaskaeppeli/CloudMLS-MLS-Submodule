@@ -94,6 +94,7 @@ describe("HKDF", () => {
     for (const c of cases) {
         describe(c.name, () => {
             it("should HKDF", async () => {
+                // check against test vectors
                 expect(await c.kdf.extract(salt, ikm)).toEqual(c.extracted);
                 expect(await c.kdf.expand(c.extracted, info, expandSize))
                     .toEqual(c.expanded);
@@ -101,6 +102,25 @@ describe("HKDF", () => {
                     .toEqual(c.labeledExtracted);
                 expect(await labeledExpand(c.kdf, c.suiteId, c.labeledExtracted, label, info, expandSize))
                     .toEqual(c.labeledExpanded);
+
+                // check with empty salt against WebCrypto
+                const hkdfKey = await window.crypto.subtle.importKey(
+                    "raw", ikm, "HKDF", false, ["deriveBits"],
+                );
+                expect(await c.kdf.expand(
+                    await c.kdf.extract(undefined, ikm),
+                    info, expandSize,
+                )).toEqual(new Uint8Array(await window.crypto.subtle.deriveBits(
+                    {name: "HKDF", hash: c.name, salt: new Uint8Array(), info: info},
+                    hkdfKey, expandSize * 8,
+                )));
+                expect(await c.kdf.expand(
+                    await c.kdf.extract(new Uint8Array(), ikm),
+                    info, expandSize,
+                )).toEqual(new Uint8Array(await window.crypto.subtle.deriveBits(
+                    {name: "HKDF", hash: c.name, salt: new Uint8Array(), info: info},
+                    hkdfKey, expandSize * 8,
+                )));
             });
         });
     }
