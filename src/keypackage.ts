@@ -71,7 +71,7 @@ export class Capabilities extends Extension {
     get extensionData(): Uint8Array {
         return tlspl.encode([
             tlspl.vector(this.versions.map(tlspl.uint16), 1),
-        ])
+        ]);
     }
     static decode(buffer: Uint8Array, offset = 0): [Capabilities, number] {
         const [[versions, ciphersuites, extensions], offset1] = tlspl.decode(
@@ -82,11 +82,29 @@ export class Capabilities extends Extension {
             ],
             buffer,
             offset,
-        )
+        );
         return [new Capabilities(versions, ciphersuites, extensions), offset1];
     }
 }
 
+// https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#parent-hash
+
+export class ParentHash extends Extension {
+    constructor(readonly parentHash: Uint8Array) {
+        super(ExtensionType.ParentHash);
+    }
+    get extensionData(): Uint8Array {
+        return tlspl.encode([
+            tlspl.variableOpaque(this.parentHash, 1),
+        ]);
+    }
+    static decode(buffer: Uint8Array, offset = 0): [ParentHash, number] {
+        const [[parentHash], offset1] = tlspl.decode(
+            [tlspl.decodeVariableOpaque(1)], buffer, offset,
+        );
+        return [new ParentHash(parentHash), offset1];
+    }
+}
 
 export class ParentNode {
     private hpkeKey: KEMPublicKey;

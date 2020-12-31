@@ -123,7 +123,7 @@ export enum SenderType {
 
 // uint8
 export enum ProposalType {
-    Reserved =0,
+    Reserved = 0,
     Add = 1,
     Update = 2,
     Remove = 3,

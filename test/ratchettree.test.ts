@@ -19,7 +19,7 @@ import {BasicCredential} from "../src/credential";
 import {NodeData, RatchetTreeView, GroupContext} from "../src/ratchettree";
 import {Extension, KeyPackage} from "../src/keypackage";
 import {Add, Update, Remove} from "../src/message";
-import {ProtocolVersion} from "../src/constants";
+import {EMPTY_BYTE_ARRAY, ProtocolVersion} from "../src/constants";
 import {stringToUint8Array} from "../src/util";
 import {Tree} from "../src/lbbtree";
 import * as tlspl from "../src/tlspl";
@@ -85,11 +85,11 @@ describe("Ratchet Tree", () => {
         );
 
         const nodes: NodeData[] = [
-            new NodeData(hpkePrivKey0, hpkePubKey0, [], credential0, undefined),
-            new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, undefined),
-            new NodeData(undefined, hpkePubKey2, [], credential1, undefined),
-            new NodeData(undefined, hpkePubKey3, [4], undefined, undefined),
-            new NodeData(undefined, hpkePubKey4, [], credential2, undefined),
+            new NodeData(hpkePrivKey0, hpkePubKey0, [], credential0, undefined, 0),
+            new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, EMPTY_BYTE_ARRAY),
+            new NodeData(undefined, hpkePubKey2, [], credential1, undefined, 1),
+            new NodeData(undefined, hpkePubKey3, [4], undefined, EMPTY_BYTE_ARRAY),
+            new NodeData(undefined, hpkePubKey4, [], credential2, undefined, 2),
         ];
         const groupContext = new GroupContext(
             new Uint8Array(),
@@ -232,11 +232,11 @@ describe("Ratchet Tree", () => {
         const ratchetTreeView0v0 = new RatchetTreeView(
             cipherSuite, 0,
             new Tree<NodeData>([
-                new NodeData(hpkePrivKey0, hpkePubKey0, [], undefined, undefined),
-                new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, undefined),
-                new NodeData(undefined, hpkePubKey2, [], undefined, undefined),
-                new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, undefined),
-                new NodeData(undefined, hpkePubKey4, [], undefined, undefined),
+                new NodeData(hpkePrivKey0, hpkePubKey0, [], undefined, undefined, 0),
+                new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, EMPTY_BYTE_ARRAY),
+                new NodeData(undefined, hpkePubKey2, [], undefined, undefined, 1),
+                new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, EMPTY_BYTE_ARRAY),
+                new NodeData(undefined, hpkePubKey4, [], undefined, undefined, 2),
             ]),
             keyPackages,
             groupContext,
@@ -244,11 +244,11 @@ describe("Ratchet Tree", () => {
         const ratchetTreeView1v0 = new RatchetTreeView(
             cipherSuite, 1,
             new Tree<NodeData>([
-                new NodeData(undefined, hpkePubKey0, [], undefined, undefined),
-                new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, undefined),
-                new NodeData(hpkePrivKey2, hpkePubKey2, [], undefined, undefined),
-                new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, undefined),
-                new NodeData(undefined, hpkePubKey4, [], undefined, undefined),
+                new NodeData(undefined, hpkePubKey0, [], undefined, undefined, 0),
+                new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, EMPTY_BYTE_ARRAY),
+                new NodeData(hpkePrivKey2, hpkePubKey2, [], undefined, undefined, 1),
+                new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, EMPTY_BYTE_ARRAY),
+                new NodeData(undefined, hpkePubKey4, [], undefined, undefined, 2),
             ]),
             keyPackages,
             groupContext,
@@ -256,11 +256,11 @@ describe("Ratchet Tree", () => {
         const ratchetTreeView2v0 = new RatchetTreeView(
             cipherSuite, 2,
             new Tree<NodeData>([
-                new NodeData(undefined, hpkePubKey0, [], undefined, undefined),
-                new NodeData(undefined, hpkePubKey1, [], undefined, undefined),
-                new NodeData(undefined, hpkePubKey2, [], undefined, undefined),
-                new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, undefined),
-                new NodeData(hpkePrivKey4, hpkePubKey4, [], undefined, undefined),
+                new NodeData(undefined, hpkePubKey0, [], undefined, undefined, 0),
+                new NodeData(undefined, hpkePubKey1, [], undefined, EMPTY_BYTE_ARRAY),
+                new NodeData(undefined, hpkePubKey2, [], undefined, undefined, 1),
+                new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, EMPTY_BYTE_ARRAY),
+                new NodeData(hpkePrivKey4, hpkePubKey4, [], undefined, undefined, 2),
             ]),
             keyPackages,
             groupContext,
@@ -370,11 +370,11 @@ describe("Ratchet Tree", () => {
         const ratchetTreeView0v0 = new RatchetTreeView(
             cipherSuite, 0,
             new Tree<NodeData>([
-                new NodeData(hpkePrivKey0, hpkePubKey0, [], credentialA, undefined),
+                new NodeData(hpkePrivKey0, hpkePubKey0, [], credentialA, undefined, 0),
                 new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, undefined),
-                new NodeData(undefined, hpkePubKey2, [], credentialB, undefined),
+                new NodeData(undefined, hpkePubKey2, [], credentialB, undefined, 1),
                 new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, undefined),
-                new NodeData(undefined, hpkePubKey4, [], credentialC, undefined),
+                new NodeData(undefined, hpkePubKey4, [], credentialC, undefined, 2),
             ]),
             keyPackages,
             groupContext,
@@ -382,11 +382,11 @@ describe("Ratchet Tree", () => {
         const ratchetTreeView1v0 = new RatchetTreeView(
             cipherSuite, 1,
             new Tree<NodeData>([
-                new NodeData(undefined, hpkePubKey0, [], credentialA, undefined),
+                new NodeData(undefined, hpkePubKey0, [], credentialA, undefined, 0),
                 new NodeData(hpkePrivKey1, hpkePubKey1, [], undefined, undefined),
-                new NodeData(hpkePrivKey2, hpkePubKey2, [], credentialB, undefined),
+                new NodeData(hpkePrivKey2, hpkePubKey2, [], credentialB, undefined, 1),
                 new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, undefined),
-                new NodeData(undefined, hpkePubKey4, [], credentialC, undefined),
+                new NodeData(undefined, hpkePubKey4, [], credentialC, undefined, 2),
             ]),
             keyPackages,
             groupContext,
@@ -394,11 +394,11 @@ describe("Ratchet Tree", () => {
         const ratchetTreeView2v0 = new RatchetTreeView(
             cipherSuite, 2,
             new Tree<NodeData>([
-                new NodeData(undefined, hpkePubKey0, [], credentialA, undefined),
+                new NodeData(undefined, hpkePubKey0, [], credentialA, undefined, 0),
                 new NodeData(undefined, hpkePubKey1, [], undefined, undefined),
-                new NodeData(undefined, hpkePubKey2, [], credentialB, undefined),
+                new NodeData(undefined, hpkePubKey2, [], credentialB, undefined, 1),
                 new NodeData(hpkePrivKey3, hpkePubKey3, [], undefined, undefined),
-                new NodeData(hpkePrivKey4, hpkePubKey4, [], credentialC, undefined),
+                new NodeData(hpkePrivKey4, hpkePubKey4, [], credentialC, undefined, 2),
             ]),
             keyPackages,
             groupContext,
@@ -471,6 +471,7 @@ describe("Ratchet Tree", () => {
             [],
             credentialC,
             undefined,
+            2,
         ));
         expect(nodes[5]).toEqual(new NodeData(
             undefined,
