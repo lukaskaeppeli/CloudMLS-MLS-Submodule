@@ -113,7 +113,6 @@ export class RatchetTreeView {
         readonly leafNum: number,
         readonly tree: Tree<NodeData>,
         readonly keyPackages: (KeyPackage | undefined)[],
-        readonly groupContext: GroupContext,
         idToLeafNum?: Map<string, number>,
         emptyLeaves?: number[],
         nodeHashes?: Record<number, Uint8Array>,
@@ -257,21 +256,15 @@ export class RatchetTreeView {
             leafNum,
             new Tree(nodes),
             keyPackages,
-            new GroupContext( // FIXME:
-                new Uint8Array(),
-                0,
-                new Uint8Array(),
-                new Uint8Array(),
-                [],
-            ),
             idToLeafNum,
             emptyLeaves,
         )
     }
 
-    async update(makeKeyPackage: MakeKeyPackage):
+    async update(makeKeyPackage: MakeKeyPackage, groupContext: GroupContext):
     Promise<[UpdatePath, Uint8Array, RatchetTreeView]> {
         // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#ratchet-tree-evolution
+        // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#synchronizing-views-of-the-tree
         const copath = [...this.tree.coPathOfLeafNum(this.leafNum)].reverse();
         const n = copath.length;
         const keyPackages = Array.from(this.keyPackages); // FIXME: O(n)
@@ -295,7 +288,7 @@ export class RatchetTreeView {
 
         let currPathSecret: Uint8Array = leafSecret;
 
-        const context = tlspl.encode([this.groupContext.encoder]);
+        const context = tlspl.encode([groupContext.encoder]);
         for (let i = 0; i < n; i++) {
             // derive secrets for this node
             currPathSecret = await deriveSecret(this.cipherSuite, currPathSecret, PATH);
@@ -305,7 +298,7 @@ export class RatchetTreeView {
             newPath.push(new NodeData(
                 currNodePriv,
                 currNodePub,
-                [], // FIXME: ???
+                [],
                 undefined,
                 undefined, // parentHash gets calculated and replaced below
             ));
@@ -369,6 +362,9 @@ export class RatchetTreeView {
         // update our tree
         const newTree = this.tree.replacePathToLeaf(this.leafNum, newPath);
 
+        const nodeHashes = Object.assign({}, this.nodeHashes); // FIXME: O(n)
+        invalidateNodeHashes(nodeHashes, this.leafNum, this.tree.size);
+
         return [
             updatePath,
             await deriveSecret(this.cipherSuite, currPathSecret, PATH),
@@ -377,13 +373,18 @@ export class RatchetTreeView {
                 this.leafNum,
                 newTree,
                 keyPackages,
-                this.groupContext, // FIXME:
+                this.idToLeafNum,
+                this.emptyLeaves,
+                nodeHashes,
             ),
         ];
     }
 
-    async applyUpdatePath(fromNode: number, updatePath: UpdatePath):
-    Promise<[Uint8Array, RatchetTreeView]> {
+    async applyUpdatePath(
+        fromNode: number,
+        updatePath: UpdatePath,
+        groupContext: GroupContext,
+    ): Promise<[Uint8Array, RatchetTreeView]> {
         // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#synchronizing-views-of-the-tree
 
         const keyPackages = Array.from(this.keyPackages); // FIXME: O(n)
@@ -424,7 +425,7 @@ export class RatchetTreeView {
                 try {
                     currPathSecret = await encryptedPathSecret.decrypt(
                         this.cipherSuite.hpke, key,
-                        tlspl.encode([this.groupContext.encoder]),
+                        tlspl.encode([groupContext.encoder]),
                     );
                     break;
                 } catch (e) {}
@@ -435,7 +436,7 @@ export class RatchetTreeView {
             newPath.push(new NodeData(
                 undefined,
                 await this.cipherSuite.hpke.kem.deserialize(updatePathNode.publicKey),
-                [], // FIXME: ???
+                [],
                 undefined,
                 undefined, // gets calculated and replaced below
             ))
@@ -514,6 +515,9 @@ export class RatchetTreeView {
 
         const newTree = this.tree.replacePathToLeaf(fromNode, newPath);
 
+        const nodeHashes = Object.assign({}, this.nodeHashes); // FIXME: O(n)
+        invalidateNodeHashes(nodeHashes, this.leafNum, this.tree.size);
+
         return [
             currPathSecret,
             new RatchetTreeView(
@@ -521,7 +525,6 @@ export class RatchetTreeView {
                 this.leafNum,
                 newTree,
                 keyPackages,
-                this.groupContext, // FIXME:
                 this.idToLeafNum,
                 this.emptyLeaves,
             ),
@@ -529,6 +532,7 @@ export class RatchetTreeView {
     }
 
     async applyProposals(proposals: Proposal[]): Promise<RatchetTreeView> {
+        // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#proposals
         let tree = this.tree;
         // removes are applied first, then updates, then adds
         const adds: Add[] = [];
@@ -569,7 +573,7 @@ export class RatchetTreeView {
                         return new NodeData(
                             undefined,
                             undefined,
-                            data.unmergedLeaves, // FIXME: ???
+                            [],
                             undefined,
                             undefined, // FIXME:
                         );
@@ -584,7 +588,18 @@ export class RatchetTreeView {
             // we already have
             keyPackages[leafNum] = update.keyPackage;
             const publicKey = await update.keyPackage.getHpkeKey();
-            const leafData = new NodeData(
+            // Blank the intermediate nodes along the path from the sender's leaf to the root
+            const path = [...tree.pathToLeafNum(leafNum)]
+                .map((data, idx, arr) => {
+                    return new NodeData(
+                        undefined,
+                        undefined,
+                        [],
+                        undefined,
+                        undefined, // FIXME:
+                    );
+                });
+            path[path.length - 1] = new NodeData(
                 leafNum === this.leafNum ? update.privateKey : undefined,
                 publicKey,
                 [],
@@ -592,17 +607,6 @@ export class RatchetTreeView {
                 undefined, // FIXME:
                 leafNum,
             );
-            const path = [...tree.pathToLeafNum(leafNum)]
-                .map((data, idx, arr) => {
-                    return new NodeData(
-                        undefined,
-                        undefined,
-                        data.unmergedLeaves.concat([leafNum]), // FIXME: ???
-                        undefined,
-                        undefined, // FIXME:
-                    );
-                });
-            path[path.length - 1] = leafData;
             tree = tree.replacePathToLeaf(leafNum, path);
         }
 
@@ -633,7 +637,7 @@ export class RatchetTreeView {
                                 return new NodeData(
                                     undefined,
                                     undefined,
-                                    data.unmergedLeaves.concat([leafNum]), // FIXME: ???
+                                    data.unmergedLeaves.concat([leafNum]),
                                     undefined,
                                     undefined, // FIXME:
                                 );
@@ -674,7 +678,6 @@ export class RatchetTreeView {
             this.leafNum,
             tree,
             keyPackages,
-            this.groupContext, // FIXME:
             idToLeafNum,
             emptyLeaves,
         );
@@ -751,6 +754,28 @@ export class RatchetTreeView {
         }
 
         return await calculateNodeHash(treemath.root(this.tree.size), this.tree.root);
+    }
+}
+
+function invalidateNodeHashes(
+    nodeHashes: Record<number, Uint8Array>,
+    leafNum: number,
+    treeSize: number,
+): void {
+    // Invalidate nodeHashes that were changed.  Start at the leaf and stop
+    // when we reach the root, or when we reach a node that we don't have a
+    // value for, because if we don't have a value for a node, then we
+    // don't have a value for any of its parents.
+    const rootNum = treemath.root(treeSize);
+    for (
+        let nodeNum = leafNum * 2;
+        nodeHashes[nodeNum];
+        nodeNum = treemath.parent(nodeNum, treeSize)
+    ) {
+        delete nodeHashes[nodeNum];
+        if (nodeNum === rootNum) {
+            break;
+        }
     }
 }
 

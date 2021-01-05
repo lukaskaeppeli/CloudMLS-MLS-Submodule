@@ -91,18 +91,10 @@ describe("Ratchet Tree", () => {
             new NodeData(undefined, hpkePubKey3, [4], undefined, EMPTY_BYTE_ARRAY),
             new NodeData(undefined, hpkePubKey4, [], credential2, undefined, 2),
         ];
-        const groupContext = new GroupContext(
-            new Uint8Array(),
-            0,
-            new Uint8Array(),
-            new Uint8Array(),
-            [],
-        );
         const ratchetTreeView = new RatchetTreeView(
             cipherSuite, 0,
             new Tree<NodeData>(nodes),
             [keyPackage0, keyPackage1, keyPackage2],
-            groupContext,
         );
 
         const ratchetTreeExtension = await ratchetTreeView.toRatchetTreeExtension();
@@ -239,7 +231,6 @@ describe("Ratchet Tree", () => {
                 new NodeData(undefined, hpkePubKey4, [], undefined, undefined, 2),
             ]),
             keyPackages,
-            groupContext,
         );
         const ratchetTreeView1v0 = new RatchetTreeView(
             cipherSuite, 1,
@@ -251,7 +242,6 @@ describe("Ratchet Tree", () => {
                 new NodeData(undefined, hpkePubKey4, [], undefined, undefined, 2),
             ]),
             keyPackages,
-            groupContext,
         );
         const ratchetTreeView2v0 = new RatchetTreeView(
             cipherSuite, 2,
@@ -263,19 +253,21 @@ describe("Ratchet Tree", () => {
                 new NodeData(hpkePrivKey4, hpkePubKey4, [], undefined, undefined, 2),
             ]),
             keyPackages,
-            groupContext,
         );
 
-        const [updatePath, commitSecret1, ratchetTreeView1v1] = await ratchetTreeView1v0.update(makeKeyPackage);
+        const [updatePath, commitSecret1, ratchetTreeView1v1] =
+            await ratchetTreeView1v0.update(makeKeyPackage, groupContext);
         expect(ratchetTreeView1v1.tree.root.data.privateKey).not.toEqual(hpkePrivKey3);
         expect(ratchetTreeView1v1.keyPackages[1]).toBeTruthy();
 
-        const [commitSecret0, ratchetTreeView0v1] = await ratchetTreeView0v0.applyUpdatePath(1, updatePath);
+        const [commitSecret0, ratchetTreeView0v1] =
+            await ratchetTreeView0v0.applyUpdatePath(1, updatePath, groupContext);
         expect(commitSecret0).toEqual(commitSecret1);
         expect(ratchetTreeView0v1.tree.root.data.privateKey).toEqual(ratchetTreeView1v1.tree.root.data.privateKey);
         expect(ratchetTreeView0v1.keyPackages[1]).toEqual(ratchetTreeView1v1.keyPackages[1]);
 
-        const [commitSecret2, ratchetTreeView2v1] = await ratchetTreeView2v0.applyUpdatePath(1, updatePath);
+        const [commitSecret2, ratchetTreeView2v1] =
+            await ratchetTreeView2v0.applyUpdatePath(1, updatePath, groupContext);
         expect(commitSecret2).toEqual(commitSecret1);
         expect(ratchetTreeView2v1.tree.root.data.privateKey).toEqual(ratchetTreeView1v1.tree.root.data.privateKey);
         expect(ratchetTreeView2v1.keyPackages[1]).toEqual(ratchetTreeView1v1.keyPackages[1]);
@@ -360,13 +352,6 @@ describe("Ratchet Tree", () => {
             signingPrivKeyC,
         );
         const keyPackages = [keyPackageA, keyPackageB, keyPackageC];
-        const groupContext = new GroupContext(
-            new Uint8Array(),
-            0,
-            new Uint8Array(),
-            new Uint8Array(),
-            [],
-        );
         const ratchetTreeView0v0 = new RatchetTreeView(
             cipherSuite, 0,
             new Tree<NodeData>([
@@ -377,7 +362,6 @@ describe("Ratchet Tree", () => {
                 new NodeData(undefined, hpkePubKey4, [], credentialC, undefined, 2),
             ]),
             keyPackages,
-            groupContext,
         );
         const ratchetTreeView1v0 = new RatchetTreeView(
             cipherSuite, 1,
@@ -389,7 +373,6 @@ describe("Ratchet Tree", () => {
                 new NodeData(undefined, hpkePubKey4, [], credentialC, undefined, 2),
             ]),
             keyPackages,
-            groupContext,
         );
         const ratchetTreeView2v0 = new RatchetTreeView(
             cipherSuite, 2,
@@ -401,7 +384,6 @@ describe("Ratchet Tree", () => {
                 new NodeData(hpkePrivKey4, hpkePubKey4, [], credentialC, undefined, 2),
             ]),
             keyPackages,
-            groupContext,
         );
 
         const [, hpkePubKey2v1] = await cipherSuite.hpke.kem.generateKeyPair();
@@ -451,7 +433,7 @@ describe("Ratchet Tree", () => {
         expect(nodes[1]).toEqual(new NodeData(
             undefined,
             undefined,
-            [1, 0],
+            [0],
             undefined,
             undefined,
         ));
@@ -461,7 +443,7 @@ describe("Ratchet Tree", () => {
         expect(nodes[3]).toEqual(new NodeData(
             undefined,
             undefined,
-            [1, 0, 3],
+            [0, 3],
             undefined,
             undefined,
         ));
