@@ -43,8 +43,8 @@ describe("MLS Plaintext", () => {
             authenticatedData,
             content,
             signingPrivKey,
-            new Uint8Array(),
             groupContext,
+            EMPTY_BYTE_ARRAY,
             membershipKey,
         );
 
@@ -91,8 +91,8 @@ describe("MLS Ciphertext", () => {
             authenticatedData,
             content,
             signingPrivKey,
-            new Uint8Array(),
             groupContext,
+            EMPTY_BYTE_ARRAY,
         );
 
         const secret = new Uint8Array(cipherSuite.hpke.kdf.extractLength);

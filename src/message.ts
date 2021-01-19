@@ -169,16 +169,19 @@ export class MLSPlaintext {
         authenticatedData: Uint8Array,
         content: Uint8Array | Proposal | Commit,
         signingKey: SigningPrivateKey,
-        confirmationTag?: Uint8Array,
-        context?: GroupContext,
-        membershipKey?: Uint8Array,
+        context?: GroupContext | undefined,
+        confirmationKey?: Uint8Array | undefined,
+        membershipKey?: Uint8Array | undefined,
     ): Promise<MLSPlaintext> {
         if (sender.senderType === SenderType.Member && context === undefined) {
             throw new Error("Group context must be provided for messages send by members");
         }
-        if (content instanceof Commit && confirmationTag === undefined) {
-            throw new Error("Confirmation tag must be present for commits");
+        if (content instanceof Commit && confirmationKey === undefined) {
+            throw new Error("Confirmation key must be present for commits");
         }
+        const confirmationTag = (content instanceof Commit && confirmationKey) ?
+            await cipherSuite.hash.mac(confirmationKey, context.confirmedTranscriptHash) :
+            undefined;
         const contentType = MLSPlaintext.getContentType(content);
         const mlsPlaintextTBS: Uint8Array = tlspl.encode([
             (sender.senderType === SenderType.Member ? context.encoder : tlspl.empty),
