@@ -287,11 +287,13 @@ export class RatchetTreeView {
         const updatePathNodes: UpdatePathNode[] = [];
 
         let currPathSecret: Uint8Array = leafSecret;
+        const pathSecrets: Uint8Array[] = [];
 
         const context = tlspl.encode([groupContext.encoder]);
         for (let i = 0; i < n; i++) {
             // derive secrets for this node
             currPathSecret = await deriveSecret(this.cipherSuite, currPathSecret, PATH);
+            pathSecrets.push(currPathSecret);
             const currNodeSecret = await deriveSecret(this.cipherSuite, currPathSecret, NODE);
             const [currNodePriv, currNodePub] = await this.cipherSuite.hpke.kem.deriveKeyPair(currNodeSecret);
 
@@ -365,9 +367,12 @@ export class RatchetTreeView {
         const nodeHashes = Object.assign({}, this.nodeHashes); // FIXME: O(n)
         invalidateNodeHashes(nodeHashes, this.leafNum, this.tree.size);
 
+        // add the commit secret
+        pathSecrets.push(await deriveSecret(this.cipherSuite, currPathSecret, PATH));
+
         return [
             updatePath,
-            await deriveSecret(this.cipherSuite, currPathSecret, PATH),
+            pathSecrets,
             new RatchetTreeView(
                 this.cipherSuite,
                 this.leafNum,

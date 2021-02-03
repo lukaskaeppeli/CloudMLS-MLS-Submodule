@@ -255,8 +255,9 @@ describe("Ratchet Tree", () => {
             keyPackages,
         );
 
-        const [updatePath, commitSecret1, ratchetTreeView1v1] =
+        const [updatePath, pathSecrets, ratchetTreeView1v1] =
             await ratchetTreeView1v0.update(makeKeyPackage, groupContext);
+        const commitSecret1 = pathSecrets[pathSecrets.length - 1];
         expect(ratchetTreeView1v1.tree.root.data.privateKey).not.toEqual(hpkePrivKey3);
         expect(ratchetTreeView1v1.keyPackages[1]).toBeTruthy();
 
