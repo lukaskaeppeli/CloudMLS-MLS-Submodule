@@ -16,7 +16,7 @@ limitations under the License.
 
 import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
 import {generateSecrets, SecretTree, HashRatchet, LenientHashRatchet} from "../src/keyschedule";
-import {GroupContext} from "../src/ratchettree";
+import {GroupContext} from "../src/group";
 
 describe("key schedule", () => {
     it("should generate distinct secrets", async () => {

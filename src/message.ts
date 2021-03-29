@@ -23,7 +23,7 @@ import {KeyPackage} from "./keypackage";
 import {SigningPublicKey, SigningPrivateKey} from "./signatures";
 import {CipherSuite} from "./ciphersuite";
 import {expandWithLabel, HashRatchet} from "./keyschedule";
-import {GroupContext} from "./ratchettree";
+import {GroupContext} from "./group";
 import * as tlspl from "./tlspl";
 
 /* ciphertext encrypted to an HPKE public key
@@ -132,8 +132,8 @@ export class MLSPlaintext {
         readonly authenticatedData: Uint8Array,
         readonly content: Uint8Array | Proposal | Commit,
         readonly signature: Uint8Array,
-        readonly confirmationTag?: Uint8Array,
-        readonly membershipTag?: Uint8Array,
+        public confirmationTag?: Uint8Array,
+        public membershipTag?: Uint8Array,
     ) {
         this.contentType = MLSPlaintext.getContentType(content);
     }
@@ -170,18 +170,10 @@ export class MLSPlaintext {
         content: Uint8Array | Proposal | Commit,
         signingKey: SigningPrivateKey,
         context?: GroupContext | undefined,
-        confirmationKey?: Uint8Array | undefined,
-        membershipKey?: Uint8Array | undefined,
     ): Promise<MLSPlaintext> {
         if (sender.senderType === SenderType.Member && context === undefined) {
-            throw new Error("Group context must be provided for messages send by members");
+            throw new Error("Group context must be provided for messages sent by members");
         }
-        if (content instanceof Commit && confirmationKey === undefined) {
-            throw new Error("Confirmation key must be present for commits");
-        }
-        const confirmationTag = (content instanceof Commit && confirmationKey) ?
-            await cipherSuite.hash.mac(confirmationKey, context.confirmedTranscriptHash) :
-            undefined;
         const contentType = MLSPlaintext.getContentType(content);
         const mlsPlaintextTBS: Uint8Array = tlspl.encode([
             (sender.senderType === SenderType.Member ? context.encoder : tlspl.empty),
@@ -195,21 +187,6 @@ export class MLSPlaintext {
                 content.encoder,
         ]);
         const signature: Uint8Array = await signingKey.sign(mlsPlaintextTBS);
-        const membershipTag =
-            membershipKey ?
-                await cipherSuite.hash.mac(
-                    membershipKey,
-                    tlspl.encode([
-                        tlspl.opaque(mlsPlaintextTBS),
-                        tlspl.variableOpaque(signature, 2),
-                        confirmationTag ?
-                            tlspl.struct(
-                                [tlspl.uint8(1), tlspl.variableOpaque(confirmationTag, 1)],
-                            ) :
-                            tlspl.uint8(0),
-                    ]),
-                ) :
-                undefined;
         return new MLSPlaintext(
             groupId,
             epoch,
@@ -217,9 +194,49 @@ export class MLSPlaintext {
             authenticatedData,
             content,
             signature,
-            confirmationTag,
-            membershipTag,
         );
+    }
+
+    async calculateTags(
+        cipherSuite: CipherSuite,
+        confirmationKey: Uint8Array | undefined,
+        membershipKey: Uint8Array,
+        context: GroupContext,
+    ): Promise<void> {
+        if (this.content instanceof Commit && !confirmationKey) {
+            throw new Error("Confirmation key must be provided for commits");
+        }
+        this.confirmationTag = (this.content instanceof Commit && confirmationKey) ?
+            await cipherSuite.hash.mac(
+                confirmationKey, context.confirmedTranscriptHash,
+            ) :
+            undefined;
+        const mlsPlaintextTBS: Uint8Array = tlspl.encode([
+            (this.sender.senderType === SenderType.Member ?
+                context.encoder :
+                tlspl.empty),
+            tlspl.variableOpaque(this.groupId, 1),
+            tlspl.uint64(this.epoch),
+            this.sender.encoder,
+            tlspl.variableOpaque(this.authenticatedData, 4),
+            tlspl.uint8(this.contentType),
+            this.content instanceof Uint8Array ?
+                tlspl.variableOpaque(this.content, 4) :
+                this.content.encoder,
+        ]);
+        this.membershipTag =
+            await cipherSuite.hash.mac(
+                membershipKey,
+                tlspl.encode([
+                    tlspl.opaque(mlsPlaintextTBS),
+                    tlspl.variableOpaque(this.signature, 2),
+                    this.confirmationTag ?
+                        tlspl.struct(
+                            [tlspl.uint8(1), tlspl.variableOpaque(this.confirmationTag, 1)],
+                        ) :
+                        tlspl.uint8(0),
+                ]),
+            );
     }
 
     async verify(
@@ -327,6 +344,7 @@ export class MLSPlaintext {
             tlspl.variableOpaque(this.groupId, 1),
             tlspl.uint64(this.epoch),
             this.sender.encoder,
+            // FIXME: tlspl.variableOpaque(this.authenticatedData, 4),
             tlspl.uint8(this.contentType),
             this.content instanceof Uint8Array ?
                 tlspl.variableOpaque(this.content, 4) :
@@ -556,6 +574,11 @@ export abstract class Proposal {
         }
     }
     abstract get encoder(): tlspl.Encoder;
+
+    async getHash(cipherSuite: CipherSuite): Promise<Uint8Array> {
+        const encoding = tlspl.encode([this.encoder]);
+        return await cipherSuite.hash.hash(encoding);
+    }
 }
 
 export class Add extends Proposal {

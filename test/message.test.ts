@@ -18,7 +18,7 @@ import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src
 import {SenderType, EMPTY_BYTE_ARRAY} from "../src/constants";
 import {Sender, MLSPlaintext, MLSCiphertext} from "../src/message";
 import {stringToUint8Array} from "../src/util";
-import {GroupContext} from "../src/ratchettree";
+import {GroupContext} from "../src/group";
 import {HashRatchet} from "../src/keyschedule";
 import * as tlspl from "../src/tlspl";
 

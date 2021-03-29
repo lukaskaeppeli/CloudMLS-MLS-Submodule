@@ -26,7 +26,8 @@ import {EMPTY_BYTE_ARRAY, MEMBER, WELCOME, NONCE, KEY} from "./constants";
 import {CipherSuite, cipherSuiteById} from "./ciphersuite";
 import {KeyPackage, Extension} from "./keypackage";
 import {HPKECiphertext} from "./message";
-import {SigningPrivateKey, SigningPublicKey} from "./signatures";
+import {SigningPrivateKey} from "./signatures";
+import {Credential} from "./credential";
 import * as tlspl from "./tlspl";
 
 export class GroupInfo {
@@ -68,8 +69,8 @@ export class GroupInfo {
         );
     }
 
-    checkSignature(pubKey: SigningPublicKey): Promise<boolean> {
-        return pubKey.verify(this.unsignedEncoding, this.signature);
+    checkSignature(credential: Credential): Promise<boolean> {
+        return credential.verify(this.unsignedEncoding, this.signature);
     }
 
     static decode(buffer: Uint8Array, offset: number): [GroupInfo, number] {

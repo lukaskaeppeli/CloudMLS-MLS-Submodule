@@ -45,7 +45,7 @@ import {
 import {CipherSuite} from "./ciphersuite";
 import * as tlspl from "./tlspl";
 import {left, right, directPath, root} from "./treemath";
-import {GroupContext} from "./ratchettree";
+import {GroupContext} from "./group";
 
 export async function expandWithLabel(
     cipherSuite: CipherSuite,
@@ -75,7 +75,7 @@ export async function deriveSecret(
     );
 }
 
-interface Secrets {
+export interface Secrets {
     joinerSecret: Uint8Array;
     memberSecret: Uint8Array;
     welcomeSecret: Uint8Array;

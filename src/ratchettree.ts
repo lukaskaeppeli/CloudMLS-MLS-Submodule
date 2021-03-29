@@ -15,17 +15,16 @@ limitations under the License.
 */
 
 import {EMPTY_BYTE_ARRAY, NODE, PATH, ProposalType} from "./constants";
-import {concatUint8Array, eqUint8Array} from "./util";
+import {eqUint8Array} from "./util";
 import {Leaf, Internal, Node, Tree} from "./lbbtree";
 import * as treemath from "./treemath";
-import {Extension, ParentHash, ParentNode, RatchetTree, KeyPackage} from "./keypackage";
+import {ParentHash, ParentNode, RatchetTree, KeyPackage} from "./keypackage";
 import {KEMPrivateKey, KEMPublicKey} from "./hpke/base";
 import {CipherSuite} from "./ciphersuite";
 import {deriveSecret} from "./keyschedule";
 import {Credential} from "./credential";
 import {
     HPKECiphertext,
-    MLSPlaintext,
     UpdatePathNode,
     UpdatePath,
     Add,
@@ -33,6 +32,7 @@ import {
     Remove,
     Proposal,
 } from "./message";
+import {GroupContext} from "./group";
 import * as tlspl from "./tlspl";
 
 /** The ratchet tree allows group members to efficiently update the group secrets.
@@ -83,7 +83,7 @@ async function resolutionOf(
     } else if (node.data.leafNum !== undefined && omitLeaves.has(node.data.leafNum)) {
         return [];
     }
-    if (node.data !== undefined) {
+    if (node.data.publicKey !== undefined) {
         const ret = [node.data.publicKey];
         for (const leafNum of node.data.unmergedLeaves) {
             if (!omitLeaves.has(leafNum)) {
@@ -172,8 +172,13 @@ export class RatchetTreeView {
         return new RatchetTree(nodes);
     }
     static async fromRatchetTreeExtension(
-        cipherSuite: CipherSuite, ext: RatchetTree, keyPackage: KeyPackage, secretKey: KEMPrivateKey,
-    ): Promise<RatchetTreeView> {
+        cipherSuite: CipherSuite,
+        ext: RatchetTree,
+        keyPackage: KeyPackage,
+        secretKey: KEMPrivateKey,
+        sender?: number,
+        pathSecret?: Uint8Array | undefined,
+    ): Promise<[RatchetTreeView, Uint8Array]> {
         const ourIdentity = keyPackage.credential.identity;
         let leafNum: number | undefined = undefined;
         const nodes: NodeData[] = new Array(ext.nodes.length);
@@ -250,19 +255,58 @@ export class RatchetTreeView {
         if (leafNum === undefined) {
             throw new Error("Could not find our leaf");
         }
+
         nodes[leafNum * 2].privateKey = secretKey;
-        return new RatchetTreeView(
-            cipherSuite,
-            leafNum,
-            new Tree(nodes),
-            keyPackages,
-            idToLeafNum,
-            emptyLeaves,
-        )
+
+        let commitSecret: Uint8Array;
+        if (pathSecret && sender !== undefined) {
+            // start from the lowest common ancestor, and iterate over
+            // ancestors, setting the secret key based on the path secret until
+            // we get to the root
+            let currNodeNum = treemath.commonAncestor(leafNum * 2, sender * 2);
+            let currPathSecret = pathSecret;
+            const numLeaves = (nodes.length + 1) / 2;
+            const root = treemath.root(numLeaves);
+            for (; ; currNodeNum = treemath.parent(currNodeNum, numLeaves)) {
+                const currNode = nodes[currNodeNum];
+                const currNodeSecret =
+                    await deriveSecret(cipherSuite, currPathSecret, NODE);
+                const [currNodePriv, currNodePub] =
+                    await cipherSuite.hpke.kem.deriveKeyPair(currNodeSecret);
+                if (!eqUint8Array(
+                    await currNodePub.serialize(),
+                    await currNode.publicKey.serialize(),
+                )) {
+                    throw new Error(`Mismatched key on node ${currNodeNum}`);
+                }
+                currNode.privateKey = currNodePriv;
+
+                currPathSecret = await deriveSecret(cipherSuite, currPathSecret, PATH);
+
+                if (currNodeNum === root) {
+                    break;
+                }
+            }
+            commitSecret = currPathSecret;
+        } else {
+            commitSecret = new Uint8Array(); // FIXME: length
+        }
+
+        return [
+            new RatchetTreeView(
+                cipherSuite,
+                leafNum,
+                new Tree(nodes),
+                keyPackages,
+                idToLeafNum,
+                emptyLeaves,
+            ),
+            commitSecret,
+        ];
     }
 
-    async update(makeKeyPackage: MakeKeyPackage, groupContext: GroupContext):
-    Promise<[UpdatePath, Uint8Array, RatchetTreeView]> {
+    async update(makeKeyPackage: MakeKeyPackage, groupContext: GroupContext, omitLeaves: Set<number> = new Set()):
+    Promise<[UpdatePath, Uint8Array[], RatchetTreeView]> {
         // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#ratchet-tree-evolution
         // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#synchronizing-views-of-the-tree
         const copath = [...this.tree.coPathOfLeafNum(this.leafNum)].reverse();
@@ -307,10 +351,7 @@ export class RatchetTreeView {
 
             const encryptedPathSecret: HPKECiphertext[] = [];
             // encrypt the path secret for users under the copath
-            for (const publicKey of await resolutionOf(copath[i], this.keyPackages)) {
-                // FIXME: "For each UpdatePathNode, the resolution of the
-                // corresponding copath node MUST be filtered by removing all
-                // new leaf nodes added as part of this MLS Commit message."
+            for (const publicKey of await resolutionOf(copath[i], this.keyPackages, omitLeaves)) {
                 encryptedPathSecret.push(await HPKECiphertext.encrypt(
                     this.cipherSuite.hpke,
                     publicKey,
@@ -630,7 +671,7 @@ export class RatchetTreeView {
                         publicKey,
                         [],
                         add.keyPackage.credential,
-                        undefined, // FIXME:
+                        new Uint8Array(), // FIXME:
                         leafNum,
                     );
                     keyPackages[leafNum] = add.keyPackage;
@@ -644,7 +685,7 @@ export class RatchetTreeView {
                                     undefined,
                                     data.unmergedLeaves.concat([leafNum]),
                                     undefined,
-                                    undefined, // FIXME:
+                                    new Uint8Array(), // FIXME:
                                 );
                             }
                         });
@@ -657,7 +698,7 @@ export class RatchetTreeView {
                         publicKey,
                         [],
                         add.keyPackage.credential,
-                        undefined, // FIXME:
+                        new Uint8Array(), // FIXME:
                         leafNum,
                     );
                     keyPackages[leafNum] = add.keyPackage;
@@ -669,7 +710,7 @@ export class RatchetTreeView {
                                 undefined,
                                 leftChild.data.unmergedLeaves.concat([leafNum]), // FIXME: ???
                                 undefined,
-                                undefined, // FIXME:
+                                new Uint8Array(), // FIXME:
                             );
                         },
                     );
@@ -782,60 +823,4 @@ function invalidateNodeHashes(
             break;
         }
     }
-}
-
-// https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#group-state
-
-export class GroupContext {
-    constructor(
-        readonly groupId: Uint8Array,
-        readonly epoch: number,
-        readonly treeHash: Uint8Array,
-        readonly confirmedTranscriptHash: Uint8Array,
-        readonly extensions: Extension[],
-    ) {}
-
-    static decode(buffer: Uint8Array, offset: number): [GroupContext, number] {
-        const [
-            [groupId, epoch, treeHash, confirmedTranscriptHash, extensions],
-            offset1,
-        ] = tlspl.decode(
-            [
-                tlspl.decodeVariableOpaque(1),
-                tlspl.decodeUint64,
-                tlspl.decodeVariableOpaque(1),
-                tlspl.decodeVariableOpaque(1),
-                tlspl.decodeVector(Extension.decode, 4),
-            ],
-            buffer, offset,
-        );
-        return [
-            new GroupContext(groupId, epoch, treeHash, confirmedTranscriptHash, extensions),
-            offset1,
-        ]
-    }
-    get encoder(): tlspl.Encoder {
-        return tlspl.struct([
-            tlspl.variableOpaque(this.groupId, 1),
-            tlspl.uint64(this.epoch),
-            tlspl.variableOpaque(this.treeHash, 1),
-            tlspl.variableOpaque(this.confirmedTranscriptHash, 1),
-            tlspl.vector(this.extensions.map(x => x.encoder), 4),
-        ]);
-    }
-}
-
-export async function calculateConfirmedTranscriptHash(
-    cipherSuite: CipherSuite,
-    plaintext: MLSPlaintext,
-    interimTranscriptHash: Uint8Array,
-): Promise<[Uint8Array, Uint8Array]> {
-    const mlsPlaintextCommitContent = tlspl.encode([plaintext.commitContentEncoder]);
-    const confirmedTranscriptHash = await cipherSuite.hash.hash(
-        concatUint8Array([interimTranscriptHash, mlsPlaintextCommitContent]),
-    );
-    const newInterimTranscriptHash = await cipherSuite.hash.hash(
-        concatUint8Array([confirmedTranscriptHash, plaintext.confirmationTag]),
-    );
-    return [confirmedTranscriptHash, newInterimTranscriptHash];
 }

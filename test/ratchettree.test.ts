@@ -16,7 +16,8 @@ limitations under the License.
 
 import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
 import {BasicCredential} from "../src/credential";
-import {NodeData, RatchetTreeView, GroupContext} from "../src/ratchettree";
+import {NodeData, RatchetTreeView} from "../src/ratchettree";
+import {GroupContext} from "../src/group";
 import {Extension, KeyPackage} from "../src/keypackage";
 import {Add, Update, Remove} from "../src/message";
 import {EMPTY_BYTE_ARRAY, ProtocolVersion} from "../src/constants";
@@ -45,7 +46,7 @@ describe("Ratchet Tree", () => {
         const credential2 = new BasicCredential(
             stringToUint8Array("@carol:example.org"),
             cipherSuite.signatureSchemeId,
-            await signingPubKey1.serialize(),
+            await signingPubKey2.serialize(),
         );
 
         const [hpkePrivKey0, hpkePubKey0] =
@@ -159,7 +160,7 @@ describe("Ratchet Tree", () => {
         const credential2 = new BasicCredential(
             stringToUint8Array("@carol:example.org"),
             cipherSuite.signatureSchemeId,
-            await signingPubKey1.serialize(),
+            await signingPubKey2.serialize(),
         );
         async function makeKeyPackage(pubKey: Uint8Array): Promise<KeyPackage> {
             return await KeyPackage.create(
