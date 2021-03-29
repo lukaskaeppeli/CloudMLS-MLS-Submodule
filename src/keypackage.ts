@@ -60,6 +60,8 @@ export abstract class Extension {
     }
 }
 
+// https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#client-capabilities
+
 export class Capabilities extends Extension {
     constructor(
         readonly versions: ProtocolVersion[],
