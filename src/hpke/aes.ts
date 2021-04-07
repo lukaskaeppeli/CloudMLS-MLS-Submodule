@@ -46,7 +46,7 @@ export const aes128Gcm: AEAD = {
     },
 
     keyLength: 16,
-    nonceLength: 96,
+    nonceLength: 12,
 
     id: 0x0001,
 };
@@ -77,7 +77,7 @@ export const aes256Gcm: AEAD = {
     },
 
     keyLength: 32,
-    nonceLength: 96,
+    nonceLength: 12,
 
     id: 0x0002,
 };

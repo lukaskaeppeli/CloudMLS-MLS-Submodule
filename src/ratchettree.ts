@@ -481,7 +481,7 @@ export class RatchetTreeView {
             }
             newPath.push(new NodeData(
                 undefined,
-                await this.cipherSuite.hpke.kem.deserialize(updatePathNode.publicKey),
+                await this.cipherSuite.hpke.kem.deserializePublic(updatePathNode.publicKey),
                 [],
                 undefined,
                 undefined, // gets calculated and replaced below

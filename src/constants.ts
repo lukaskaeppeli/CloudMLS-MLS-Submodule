@@ -23,6 +23,7 @@ export const EMPTY_BYTE_ARRAY = new Uint8Array(0);
 // Uint8Array versions of strings
 export const APPLICATION = stringToUint8Array("application");
 export const AUTHENTICATION = stringToUint8Array("authentication");
+export const BASE_NONCE = stringToUint8Array("base_nonce");
 export const CANDIDATE = stringToUint8Array("candidate");
 export const CONFIRM = stringToUint8Array("confirm");
 export const DKP_PRK = stringToUint8Array("dkp_prk");
@@ -43,7 +44,6 @@ export const MEMBERSHIP = stringToUint8Array("membership");
 export const NODE = stringToUint8Array("node");
 export const NONCE = stringToUint8Array("nonce");
 export const PATH = stringToUint8Array("path");
-export const PSK_HASH = stringToUint8Array("psk_hash");
 export const PSK_ID_HASH = stringToUint8Array("psk_id_hash");
 export const RESUMPTION = stringToUint8Array("resumption");
 export const SEC = stringToUint8Array("sec");

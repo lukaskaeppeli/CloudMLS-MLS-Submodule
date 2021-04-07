@@ -19,6 +19,7 @@ limitations under the License.
 
 import {KDF, DH, DHPublicKey, DHPrivateKey, labeledExtract, labeledExpand} from "./base"
 import {EMPTY_BYTE_ARRAY, DKP_PRK, SK} from "../constants";
+import {hexToUint8Array} from "../util";
 import {ec as EC} from "elliptic";
 
 // 4.1.  DH-Based KEM
@@ -28,6 +29,7 @@ function makeDH(
     publicKeyLength: number,
     privateKeyLength: number,
     secretLength: number,
+    clamp: (Uint8Array) => any,
 ): DH {
     const ec = new EC(name);
 
@@ -39,15 +41,35 @@ function makeDH(
             }
 
             return privKey.keyPair.derive(this.key)
-                .toArrayLike(Uint8Array, "be", privateKeyLength);
+                .toArrayLike(Uint8Array, "be", privateKeyLength).reverse();
         }
         async serialize(): Promise<Uint8Array> {
-            return Uint8Array.from(this.key.encode());
+            const k = Uint8Array.from(this.key.encode());
+            k.reverse();
+            if (k.length < publicKeyLength) {
+                const k1 = new Uint8Array(publicKeyLength);
+                k1.set(k);
+                return k1;
+            } else {
+                return k;
+            }
         }
     }
 
     class PrivateKey extends DHPrivateKey {
         constructor(readonly keyPair) { super(); }
+
+        async serialize(): Promise<Uint8Array> {
+            const k = hexToUint8Array(this.keyPair.getPrivate("hex"));
+            k.reverse();
+            if (k.length < publicKeyLength) {
+                const k1 = new Uint8Array(privateKeyLength);
+                k1.set(k);
+                return k1;
+            } else {
+                return k;
+            }
+        }
     }
 
     return {
@@ -67,12 +89,21 @@ function makeDH(
                 kdf, suiteId,
                 dkpPrk, SK, EMPTY_BYTE_ARRAY, privateKeyLength,
             );
+            clamp(sk);
+            sk.reverse();
             const keyPair = ec.keyFromPrivate(sk);
             return [new PrivateKey(keyPair), new PublicKey(keyPair.getPublic())];
         },
 
-        async deserialize(enc: Uint8Array): Promise<DHPublicKey> {
-            return new PublicKey(ec.keyFromPublic(enc).getPublic());
+        async deserializePublic(enc: Uint8Array): Promise<DHPublicKey> {
+            return new PublicKey(ec.keyFromPublic(enc.reverse()).getPublic());
+        },
+
+        async deserializePrivate(enc: Uint8Array): Promise<[DHPrivateKey, DHPublicKey]> {
+            clamp(enc);
+            enc.reverse();
+            const keyPair = ec.keyFromPrivate(enc);
+            return [new PrivateKey(keyPair), new PublicKey(keyPair.getPublic())];
         },
 
         publicKeyLength: publicKeyLength,
@@ -81,4 +112,17 @@ function makeDH(
     };
 }
 
-export const x25519: DH = makeDH("curve25519", 32, 32, 32);
+function clamp25519(key: Uint8Array) {
+    key[0] &= 248;
+    key[31] &= 127;
+    key[31] |= 64;
+    return key;
+}
+
+//function clamp448(key: Uint8Array) {
+//    key[0] &= 252;
+//    key[55] |= 128
+//    return key;
+//}
+
+export const x25519: DH = makeDH("curve25519", 32, 32, 32, clamp25519);

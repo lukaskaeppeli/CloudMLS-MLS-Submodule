@@ -19,7 +19,7 @@ limitations under the License.
 
 import {KDF, DH, DHPublicKey, DHPrivateKey, labeledExtract, labeledExpand} from "./base"
 import {EMPTY_BYTE_ARRAY, CANDIDATE, DKP_PRK} from "../constants";
-import {eqUint8Array, geUint8Array} from "../util";
+import {eqUint8Array, geUint8Array, hexToUint8Array} from "../util";
 import {ec as EC} from "elliptic";
 
 // 4.1.  DH-Based KEM
@@ -52,6 +52,10 @@ function makeDH(
 
     class PrivateKey extends DHPrivateKey {
         constructor(readonly keyPair) { super(); }
+
+        async serialize(): Promise<Uint8Array> {
+            return hexToUint8Array(this.keyPair.getPrivate("hex"));
+        }
     }
 
     return {
@@ -84,8 +88,14 @@ function makeDH(
             return [new PrivateKey(keyPair), new PublicKey(keyPair.getPublic())];
         },
 
-        async deserialize(enc: Uint8Array): Promise<DHPublicKey> {
+        async deserializePublic(enc: Uint8Array): Promise<DHPublicKey> {
             return new PublicKey(ec.keyFromPublic(enc).getPublic());
+        },
+
+        async deserializePrivate(enc: Uint8Array): Promise<[DHPrivateKey, DHPublicKey]> {
+            // FIXME: make sure private key is non-zero (mod order)
+            const keyPair = ec.keyFromPrivate(enc)
+            return [new PrivateKey(keyPair), new PublicKey(keyPair.getPublic())];
         },
 
         publicKeyLength: publicKeyLength,

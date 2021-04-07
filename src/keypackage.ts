@@ -118,7 +118,7 @@ export class ParentNode {
 
     async getHpkeKey(cipherSuite: CipherSuite): Promise<KEMPublicKey> {
         if (!this.hpkeKey) {
-            this.hpkeKey = await cipherSuite.hpke.kem.deserialize(this.publicKey);
+            this.hpkeKey = await cipherSuite.hpke.kem.deserializePublic(this.publicKey);
         }
         return this.hpkeKey;
     }
@@ -237,7 +237,7 @@ export class KeyPackage {
     }
     async getHpkeKey(): Promise<KEMPublicKey> {
         if (!this.hpkeKey) {
-            this.hpkeKey = await this.cipherSuite.hpke.kem.deserialize(this.hpkeInitKey);
+            this.hpkeKey = await this.cipherSuite.hpke.kem.deserializePublic(this.hpkeInitKey);
         }
         return this.hpkeKey;
     }
