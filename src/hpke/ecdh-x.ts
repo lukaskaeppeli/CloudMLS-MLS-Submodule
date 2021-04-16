@@ -96,13 +96,15 @@ function makeDH(
         },
 
         async deserializePublic(enc: Uint8Array): Promise<DHPublicKey> {
-            return new PublicKey(ec.keyFromPublic(enc.reverse()).getPublic());
+            const k = new Uint8Array(enc);
+            return new PublicKey(ec.keyFromPublic(k.reverse()).getPublic());
         },
 
         async deserializePrivate(enc: Uint8Array): Promise<[DHPrivateKey, DHPublicKey]> {
-            clamp(enc);
-            enc.reverse();
-            const keyPair = ec.keyFromPrivate(enc);
+            const k = new Uint8Array(enc);
+            clamp(k);
+            k.reverse();
+            const keyPair = ec.keyFromPrivate(k);
             return [new PrivateKey(keyPair), new PublicKey(keyPair.getPublic())];
         },
 
