@@ -246,7 +246,7 @@ export class MLSPlaintext {
         membershipKey?: Uint8Array,
     ): Promise<boolean> {
         if (this.sender.senderType === SenderType.Member && context === undefined) {
-            throw new Error("Group context must be provided for messages send by members");
+            throw new Error("Group context must be provided for messages sent by members");
         }
         if (this.content instanceof Commit && this.confirmationTag === undefined) {
             throw new Error("Confirmation tag must be present for commits");

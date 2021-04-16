@@ -79,9 +79,9 @@ export class Group {
 
         const initialGroupContext = new GroupContext(
             groupId,
-            0,
+            0, // FIXME: or 1?
             await ratchetTreeView0.calculateTreeHash(),
-            EMPTY_BYTE_ARRAY,
+            EMPTY_BYTE_ARRAY, // initial confirmed transcript hash
             groupExtensions,
         );
 
@@ -113,11 +113,6 @@ export class Group {
         // separate proposals, and the Commit message will need to use hashes
         // instead
         const commit = new Commit(adds.map(add => new ProposalWrapper(add)), updatePath);
-        // FIXME: Construct an MLSPlaintext object containing the Commit
-        // object. Sign the MLSPlaintext using the current epoch's GroupContext
-        // as context. Use the signature, the commit_secret and the psk_secret
-        // to advance the key schedule and compute the confirmation_tag value
-        // in the MLSPlaintext. ???
         const plaintext = await MLSPlaintext.create(
             cipherSuite,
             groupId, 0,

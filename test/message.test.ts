@@ -44,8 +44,13 @@ describe("MLS Plaintext", () => {
             content,
             signingPrivKey,
             groupContext,
-            EMPTY_BYTE_ARRAY,
+        );
+
+        await mlsPlaintext.calculateTags(
+            cipherSuite,
+            undefined,
             membershipKey,
+            groupContext,
         );
 
         const encodedMlsPlaintext = tlspl.encode([mlsPlaintext.encoder]);
@@ -92,7 +97,6 @@ describe("MLS Ciphertext", () => {
             content,
             signingPrivKey,
             groupContext,
-            EMPTY_BYTE_ARRAY,
         );
 
         const secret = new Uint8Array(cipherSuite.hpke.kdf.extractLength);

@@ -102,7 +102,7 @@ describe("Ratchet Tree", () => {
         const encodedExtension = tlspl.encode([ratchetTreeExtension.encoder]);
         // eslint-disable-next-line comma-dangle, array-bracket-spacing
         const [[decodedExtension], ] = tlspl.decode([Extension.decode], encodedExtension);
-        const decodedRatchetTreeView = await RatchetTreeView.fromRatchetTreeExtension(
+        const [decodedRatchetTreeView, ] = await RatchetTreeView.fromRatchetTreeExtension(
             cipherSuite, decodedExtension, keyPackage1,
             hpkePrivKey1,
         );
@@ -437,7 +437,7 @@ describe("Ratchet Tree", () => {
             undefined,
             [0],
             undefined,
-            undefined,
+            EMPTY_BYTE_ARRAY,
         ));
         expect(await nodes[2].publicKey.serialize())
             .toEqual(await hpkePubKey2v1.serialize());
@@ -447,7 +447,7 @@ describe("Ratchet Tree", () => {
             undefined,
             [0, 3],
             undefined,
-            undefined,
+            EMPTY_BYTE_ARRAY,
         ));
         expect(nodes[4]).toEqual(new NodeData(
             hpkePrivKey4,
@@ -462,7 +462,7 @@ describe("Ratchet Tree", () => {
             undefined,
             [3],
             undefined,
-            undefined,
+            EMPTY_BYTE_ARRAY,
         ));
         expect(await nodes[6].publicKey.serialize())
             .toEqual(await hpkePubKey6v1.serialize());
