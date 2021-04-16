@@ -21,7 +21,7 @@ import {CipherSuite} from "./ciphersuite";
 import {KEMPrivateKey} from "./hpke/base";
 import {SigningPrivateKey} from "./signatures";
 import {Tree} from "./lbbtree";
-import {MLSPlaintext, Add, Commit, ProposalWrapper, Sender} from "./message";
+import {MLSPlaintext, Add, Commit, ProposalWrapper, Sender, UpdatePath} from "./message";
 import {concatUint8Array, eqUint8Array} from "./util";
 import {EMPTY_BYTE_ARRAY, ProtocolVersion, SenderType} from "./constants";
 import {Credential} from "./credential";
@@ -331,6 +331,232 @@ export class Group {
         );
 
         return [keyId, group];
+    }
+
+    async commit(
+        proposals: ProposalWrapper[],
+        credential: Credential,
+        signingPrivateKey: SigningPrivateKey,
+    ): Promise<[MLSPlaintext, Welcome]> {
+        // unwrap the proposals
+        // FIXME: allow proposal references too
+        // FIXME: enforce ordering of proposals
+        const bareProposals = proposals.map(({proposal}) => proposal);
+
+        const newMembers: KeyPackage[] = [];
+        for (const proposal of bareProposals) {
+            if (proposal instanceof Add) {
+                newMembers.push(proposal.keyPackage);
+            }
+        }
+
+        const initialGroupContext = new GroupContext(
+            this.groupId,
+            this.epoch,
+            await this.ratchetTreeView.calculateTreeHash(),
+            this.confirmedTranscriptHash,
+            this.extensions,
+        );
+
+        const ratchetTreeView1 = await this.ratchetTreeView.applyProposals(bareProposals);
+
+        // update path is required if there are no proposals, or if there is a
+        // non-add proposal
+        // FIXME: figure out whether updating the path is advantageous even when
+        // we only have adds
+        const pathRequired = bareProposals.length == 0 ||
+            bareProposals.some((proposal) => { return !(proposal instanceof Add); })
+
+        let updatePath: UpdatePath;
+        let commitSecret: Uint8Array = EMPTY_BYTE_ARRAY; // FIXME: should be 0 vector of the right length
+        let pathSecrets: Uint8Array[] = [];
+        let ratchetTreeView2 = ratchetTreeView1;
+        if (pathRequired) {
+            const provisionalGroupContext = new GroupContext(
+                this.groupId,
+                this.epoch, // FIXME: or epoch + 1?
+                await ratchetTreeView1.calculateTreeHash(),
+                this.confirmedTranscriptHash,
+                this.extensions,
+            );
+
+            [updatePath, pathSecrets, ratchetTreeView2] = await ratchetTreeView1.update(
+                (pubkey) => KeyPackage.create(
+                    this.version,
+                    this.cipherSuite,
+                    pubkey,
+                    credential,
+                    [], // FIXME: extensions -- same as group extension?
+                    signingPrivateKey,
+                ),
+                provisionalGroupContext,
+            );
+
+            commitSecret = pathSecrets[pathSecrets.length - 1];
+        }
+
+        // FIXME: if we have too many proposals, we may need to send some proposals
+        // separately, and the Commit message will need to use hashes instead
+        const commit = new Commit(proposals, updatePath);
+
+        const plaintext = await MLSPlaintext.create(
+            this.cipherSuite,
+            this.groupId, this.epoch,
+            new Sender(SenderType.Member, this.ratchetTreeView.leafNum),
+            EMPTY_BYTE_ARRAY,
+            commit,
+            signingPrivateKey,
+            initialGroupContext,
+        );
+
+        const confirmedTranscriptHash =
+            await calculateConfirmedTranscriptHash(
+                this.cipherSuite,
+                plaintext,
+                this.interimTranscriptHash,
+            );
+
+        const newGroupContext = new GroupContext(
+            this.groupId,
+            1,
+            await ratchetTreeView2.calculateTreeHash(),
+            confirmedTranscriptHash,
+            this.extensions,
+        );
+
+        const secrets =
+            await generateSecrets(
+                this.cipherSuite,
+                this.secrets.initSecret,
+                commitSecret,
+                newGroupContext,
+            );
+
+        await plaintext.calculateTags(
+            this.cipherSuite,
+            secrets.confirmationKey,
+            secrets.membershipKey,
+            initialGroupContext,
+        );
+
+        const interimTranscriptHash =
+            await calculateInterimTranscriptHash(
+                this.cipherSuite,
+                plaintext,
+                confirmedTranscriptHash,
+            );
+
+        // FIXME: make welcome messages
+        const recipients: {keyPackage: KeyPackage, pathSecret: Uint8Array}[] = [];
+        const groupInfo = await GroupInfo.create(
+            this.groupId,
+            this.epoch + 1,
+            await ratchetTreeView2.calculateTreeHash(),
+            confirmedTranscriptHash,
+            // FIXME: other extensions?
+            // FIXME: allow sending the ratchet tree in other ways
+            [/*await ratchetTreeView2.toRatchetTreeExtension()*/],
+            plaintext.confirmationTag,
+            this.ratchetTreeView.leafNum,
+            signingPrivateKey,
+        );
+        const welcome = await Welcome.create(
+            this.cipherSuite,
+            secrets.joinerSecret,
+            groupInfo,
+            recipients,
+        );
+
+        this.epoch++;
+        this.confirmedTranscriptHash = confirmedTranscriptHash;
+        this.interimTranscriptHash = interimTranscriptHash;
+        this.ratchetTreeView = ratchetTreeView2;
+        this.secrets = secrets;
+
+        return [plaintext, welcome];
+    }
+
+    async applyCommit(
+        plaintext: MLSPlaintext,
+    ): Promise<void> {
+        if (!(plaintext.content instanceof Commit)) {
+            throw new Error("must be a Commit");
+        }
+        if (plaintext.epoch !== this.epoch) {
+            throw new Error(`Wrong epoch: expected ${this.epoch}, got ${plaintext.epoch}`);
+        }
+
+        const commit: Commit = plaintext.content;
+
+        // unwrap the proposals
+        // FIXME: allow proposal references too
+        // FIXME: enforce ordering of proposals
+        const bareProposals = (commit.proposals as ProposalWrapper[])
+            .map(({proposal}) => proposal);
+        const pathRequired = bareProposals.length == 0 ||
+            bareProposals.some((proposal) => { return !(proposal instanceof Add); })
+
+        const ratchetTreeView1 = await this.ratchetTreeView.applyProposals(bareProposals);
+
+        let commitSecret = EMPTY_BYTE_ARRAY; // FIXME: should be 0 vector of the right length
+        let ratchetTreeView2 = ratchetTreeView1;
+        if (commit.updatePath) {
+            const provisionalGroupContext = new GroupContext(
+                this.groupId,
+                this.epoch, // FIXME: or epoch + 1?
+                await ratchetTreeView1.calculateTreeHash(),
+                this.confirmedTranscriptHash,
+                this.extensions,
+            );
+
+            [commitSecret, ratchetTreeView2] = await ratchetTreeView1.applyUpdatePath(
+                plaintext.sender.sender,
+                commit.updatePath,
+                provisionalGroupContext,
+            );
+        } else if (pathRequired) {
+            throw new Error("UpdatePath was required for this commit, but not UpdatePath given");
+        }
+
+        const confirmedTranscriptHash =
+            await calculateConfirmedTranscriptHash(
+                this.cipherSuite,
+                plaintext,
+                this.interimTranscriptHash,
+            );
+
+        const newGroupContext = new GroupContext(
+            this.groupId,
+            1,
+            await ratchetTreeView2.calculateTreeHash(),
+            confirmedTranscriptHash,
+            this.extensions,
+        );
+
+        const interimTranscriptHash =
+            await calculateInterimTranscriptHash(
+                this.cipherSuite,
+                plaintext,
+                confirmedTranscriptHash,
+            );
+
+        const secrets =
+            await generateSecrets(
+                this.cipherSuite,
+                this.secrets.initSecret,
+                commitSecret,
+                newGroupContext,
+            );
+
+        if (!plaintext.verifyConfirmationTag(this.cipherSuite, secrets.confirmationKey, newGroupContext)) {
+            throw new Error("Confirmation tag does not match");
+        }
+
+        this.epoch++;
+        this.confirmedTranscriptHash = confirmedTranscriptHash;
+        this.interimTranscriptHash = interimTranscriptHash;
+        this.ratchetTreeView = ratchetTreeView2;
+        this.secrets = secrets;
     }
 }
 

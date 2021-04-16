@@ -18,6 +18,7 @@ limitations under the License.
  */
 
 import {HPKE, KEMPublicKey, KEMPrivateKey} from "./hpke/base";
+import {eqUint8Array} from "./util";
 import {EMPTY_BYTE_ARRAY, NONCE, KEY, ContentType, SenderType, ProposalType, ProposalOrRefType} from "./constants";
 import {KeyPackage} from "./keypackage";
 import {SigningPublicKey, SigningPrivateKey} from "./signatures";
@@ -265,7 +266,6 @@ export class MLSPlaintext {
         if (await signingPubKey.verify(mlsPlaintextTBS, this.signature) === false) {
             return false;
         }
-        // FIXME: verify confirmation tag?
         if (this.membershipTag) {
             if (membershipKey === undefined) {
                 throw new Error("Membership tag is present, but membership key not supplied");
@@ -284,6 +284,22 @@ export class MLSPlaintext {
             );
         }
         return true;
+    }
+
+    async verifyConfirmationTag(
+        cipherSuite: CipherSuite,
+        confirmationKey: Uint8Array | undefined,
+        context: GroupContext,
+    ): Promise<boolean> {
+        if (!(this.content instanceof Commit)) {
+            throw new Error("Confirmation tag can only be checked on commit messages");
+        }
+
+        const confirmationTag = await cipherSuite.hash.mac(
+            confirmationKey, context.confirmedTranscriptHash,
+        );
+
+        return eqUint8Array(confirmationTag, this.confirmationTag);
     }
 
     static decode(buffer: Uint8Array, offset: number): [MLSPlaintext, number] {
@@ -689,7 +705,7 @@ export class Reference extends ProposalOrRef {
 export class Commit {
     constructor(
         readonly proposals: ProposalOrRef[],
-        readonly updatePath?: UpdatePath,
+        readonly updatePath?: UpdatePath | undefined,
     ) {}
 
     static decode(buffer: Uint8Array, offset: number): [Commit, number] {
