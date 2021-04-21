@@ -577,7 +577,7 @@ export class RatchetTreeView {
         ];
     }
 
-    async applyProposals(proposals: Proposal[]): Promise<RatchetTreeView> {
+    async applyProposals(proposals: Proposal[]): Promise<[RatchetTreeView, number[]]> {
         // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#proposals
         let tree = this.tree;
         // removes are applied first, then updates, then adds
@@ -587,6 +587,7 @@ export class RatchetTreeView {
         let idToLeafNum = this.idToLeafNum;
         let emptyLeaves = this.emptyLeaves;
         const keyPackages = Array.from(this.keyPackages);
+        const addPositions: number[] = []; // which positions the new leaves were added to
 
         for (const proposal of proposals) {
             switch (proposal.msgType) {
@@ -666,6 +667,7 @@ export class RatchetTreeView {
                 const publicKey = await add.keyPackage.getHpkeKey();
                 if (emptyLeaves.length) {
                     const leafNum = emptyLeaves.shift();
+                    addPositions.push(leafNum);
                     const leafData = new NodeData(
                         undefined,
                         publicKey,
@@ -693,6 +695,7 @@ export class RatchetTreeView {
                     idToLeafNum.set(add.keyPackage.credential.identity.toString(), leafNum);
                 } else {
                     const leafNum = tree.size;
+                    addPositions.push(leafNum);
                     const leafData = new NodeData(
                         undefined,
                         publicKey,
@@ -719,14 +722,17 @@ export class RatchetTreeView {
             }
         }
 
-        return new RatchetTreeView(
-            this.cipherSuite,
-            this.leafNum,
-            tree,
-            keyPackages,
-            idToLeafNum,
-            emptyLeaves,
-        );
+        return [
+            new RatchetTreeView(
+                this.cipherSuite,
+                this.leafNum,
+                tree,
+                keyPackages,
+                idToLeafNum,
+                emptyLeaves,
+            ),
+            addPositions,
+        ];
     }
 
     // https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#parent-hash

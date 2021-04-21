@@ -418,12 +418,14 @@ describe("Ratchet Tree", () => {
             signingPrivKeyE,
         );
 
-        const ratchetTreeView2v1 = await ratchetTreeView2v0.applyProposals([
+        const [ratchetTreeView2v1, addPositions] = await ratchetTreeView2v0.applyProposals([
             new Remove(0),
             new Update(kpBv1),
             new Add(kpDv1),
             new Add(kpEv1),
         ]);
+
+        expect(addPositions).toEqual([0, 3]);
 
         const nodes = [...ratchetTreeView2v1.tree];
 

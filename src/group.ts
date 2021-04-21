@@ -87,7 +87,8 @@ export class Group {
 
         const adds = otherMembers.map(keyPackage => new Add(keyPackage));
 
-        const ratchetTreeView1 = await ratchetTreeView0.applyProposals(adds);
+        // eslint-disable-next-line comma-dangle, array-bracket-spacing
+        const [ratchetTreeView1, ] = await ratchetTreeView0.applyProposals(adds);
 
         const provisionalGroupContext = new GroupContext(
             groupId,
@@ -358,7 +359,8 @@ export class Group {
             this.extensions,
         );
 
-        const ratchetTreeView1 = await this.ratchetTreeView.applyProposals(bareProposals);
+        const [ratchetTreeView1, addPositions] =
+            await this.ratchetTreeView.applyProposals(bareProposals);
 
         // update path is required if there are no proposals, or if there is a
         // non-add proposal
@@ -496,7 +498,8 @@ export class Group {
         const pathRequired = bareProposals.length == 0 ||
             bareProposals.some((proposal) => { return !(proposal instanceof Add); })
 
-        const ratchetTreeView1 = await this.ratchetTreeView.applyProposals(bareProposals);
+        const [ratchetTreeView1, ] = // eslint-disable-line comma-dangle, array-bracket-spacing
+            await this.ratchetTreeView.applyProposals(bareProposals);
 
         let commitSecret = EMPTY_BYTE_ARRAY; // FIXME: should be 0 vector of the right length
         let ratchetTreeView2 = ratchetTreeView1;
