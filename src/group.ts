@@ -465,7 +465,7 @@ export class Group {
                 recipients.push({keyPackage: newMembers[i], pathSecret: pathSecrets[nodeNumToLevel[ancestor]]})
             }
         } else {
-            recipients = newMembers.map(keyPackage => {keyPackage});
+            recipients = newMembers.map(keyPackage => { return {keyPackage}; });
         }
         const groupInfo = await GroupInfo.create(
             this.groupId,
