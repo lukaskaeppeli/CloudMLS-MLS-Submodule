@@ -64,5 +64,5 @@ Targetting draft-11
 - Group operations
   - [X] Create new group
   - [X] Create group from invite
-  - [ ] Create commit and update group
-  - [ ] Update group based on received commit
+  - [X] Create commit and update group
+  - [X] Update group based on received commit
