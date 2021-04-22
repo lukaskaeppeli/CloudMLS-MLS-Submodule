@@ -46,6 +46,10 @@ export class Group {
         private secrets: Secrets,
     ) {}
 
+    get leafNum(): number {
+        return this.ratchetTreeView.leafNum;
+    }
+
     /** Create a brand new group.
      */
     static async createNew(
@@ -405,7 +409,7 @@ export class Group {
         const plaintext = await MLSPlaintext.create(
             this.cipherSuite,
             this.groupId, this.epoch,
-            new Sender(SenderType.Member, this.ratchetTreeView.leafNum),
+            new Sender(SenderType.Member, this.leafNum),
             EMPTY_BYTE_ARRAY,
             commit,
             signingPrivateKey,
@@ -454,14 +458,14 @@ export class Group {
         if (pathSecrets.length) {
             recipients = [];
             // FIXME: O(n log n)
-            const path = directPath(this.ratchetTreeView.leafNum * 2, ratchetTreeView2.tree.size);
+            const path = directPath(this.leafNum * 2, ratchetTreeView2.tree.size);
             const nodeNumToLevel: Record<number, number> = {}
             for (let i = 0; i < path.length; i++) {
                 nodeNumToLevel[path[i]] = i;
             }
             for (let i = 0; i < addPositions.length; i++) {
                 const leafNum = addPositions[i];
-                const ancestor = commonAncestor(leafNum * 2, this.ratchetTreeView.leafNum * 2);
+                const ancestor = commonAncestor(leafNum * 2, this.leafNum * 2);
                 recipients.push({keyPackage: newMembers[i], pathSecret: pathSecrets[nodeNumToLevel[ancestor]]})
             }
         } else {
@@ -476,7 +480,7 @@ export class Group {
             // FIXME: allow sending the ratchet tree in other ways
             [await ratchetTreeView2.toRatchetTreeExtension()],
             plaintext.confirmationTag,
-            this.ratchetTreeView.leafNum,
+            this.leafNum,
             signingPrivateKey,
         );
         const welcome = await Welcome.create(
