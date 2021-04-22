@@ -27,6 +27,7 @@ import {EMPTY_BYTE_ARRAY, ProtocolVersion, SenderType} from "./constants";
 import {Credential} from "./credential";
 import {GroupInfo, Welcome} from "./welcome";
 import * as tlspl from "./tlspl";
+import {commonAncestor, directPath} from "./treemath";
 
 /* Manages the state of the group.
  */
@@ -420,7 +421,7 @@ export class Group {
 
         const newGroupContext = new GroupContext(
             this.groupId,
-            1,
+            this.epoch + 1,
             await ratchetTreeView2.calculateTreeHash(),
             confirmedTranscriptHash,
             this.extensions,
@@ -448,8 +449,24 @@ export class Group {
                 confirmedTranscriptHash,
             );
 
-        // FIXME: make welcome messages
-        const recipients: {keyPackage: KeyPackage, pathSecret: Uint8Array}[] = [];
+        // make welcome messages
+        let recipients: {keyPackage: KeyPackage, pathSecret?: Uint8Array}[];
+        if (pathSecrets.length) {
+            recipients = [];
+            // FIXME: O(n log n)
+            const path = directPath(this.ratchetTreeView.leafNum * 2, ratchetTreeView2.tree.size);
+            const nodeNumToLevel: Record<number, number> = {}
+            for (let i = 0; i < path.length; i++) {
+                nodeNumToLevel[path[i]] = i;
+            }
+            for (let i = 0; i < addPositions.length; i++) {
+                const leafNum = addPositions[i];
+                const ancestor = commonAncestor(leafNum * 2, this.ratchetTreeView.leafNum * 2);
+                recipients.push({keyPackage: newMembers[i], pathSecret: pathSecrets[nodeNumToLevel[ancestor]]})
+            }
+        } else {
+            recipients = newMembers.map(keyPackage => {keyPackage});
+        }
         const groupInfo = await GroupInfo.create(
             this.groupId,
             this.epoch + 1,
@@ -457,7 +474,7 @@ export class Group {
             confirmedTranscriptHash,
             // FIXME: other extensions?
             // FIXME: allow sending the ratchet tree in other ways
-            [/*await ratchetTreeView2.toRatchetTreeExtension()*/],
+            [await ratchetTreeView2.toRatchetTreeExtension()],
             plaintext.confirmationTag,
             this.ratchetTreeView.leafNum,
             signingPrivateKey,
@@ -498,7 +515,8 @@ export class Group {
         const pathRequired = bareProposals.length == 0 ||
             bareProposals.some((proposal) => { return !(proposal instanceof Add); })
 
-        const [ratchetTreeView1, ] = // eslint-disable-line comma-dangle, array-bracket-spacing
+        // eslint-disable-next-line comma-dangle, array-bracket-spacing
+        const [ratchetTreeView1, ] =
             await this.ratchetTreeView.applyProposals(bareProposals);
 
         let commitSecret = EMPTY_BYTE_ARRAY; // FIXME: should be 0 vector of the right length
@@ -530,7 +548,7 @@ export class Group {
 
         const newGroupContext = new GroupContext(
             this.groupId,
-            1,
+            this.epoch + 1,
             await ratchetTreeView2.calculateTreeHash(),
             confirmedTranscriptHash,
             this.extensions,

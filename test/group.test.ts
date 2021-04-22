@@ -20,9 +20,9 @@ import {KeyPackage} from "../src/keypackage";
 import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
 import {ProtocolVersion} from "../src/constants";
 import {stringToUint8Array} from "../src/util";
-import {Remove, ProposalWrapper} from "../src/message";
+import {Add, Remove, ProposalWrapper} from "../src/message";
 
-// create a key paackage for a user with a new signing and HPKE key
+// create a key package for a user with a new signing and HPKE key
 async function makeKeyPackage(userId: string) {
     const [signingPrivKey, signingPubKey] =
         await cipherSuite.signatureScheme.generateKeyPair();
@@ -62,7 +62,7 @@ describe("Group", () => {
             makeKeyPackage("@frank:example.org"),
         ]);
 
-        const [groupA, mlsPlaintext, welcome] = await Group.createNew(
+        const [groupA, , welcome] = await Group.createNew(
             ProtocolVersion.Mls10,
             cipherSuite,
             stringToUint8Array("groupid"),
@@ -71,7 +71,7 @@ describe("Group", () => {
             [keyPackageB, keyPackageC, keyPackageD, keyPackageE, keyPackageF],
         );
 
-        const [[keyB, groupB], [keyC, groupC], [keyD, groupD], [keyE, groupE], [keyF, groupF]] = await Promise.all([
+        const [[, groupB], [, groupC], [, groupD], [, groupE], [, groupF]] = await Promise.all([
             Group.createFromWelcome(welcome, {bob1: [keyPackageB, hpkePrivKeyB]}),
             Group.createFromWelcome(welcome, {carol1: [keyPackageC, hpkePrivKeyC]}),
             Group.createFromWelcome(welcome, {dan1: [keyPackageD, hpkePrivKeyD]}),
@@ -119,22 +119,50 @@ describe("Group", () => {
             Group.createFromWelcome(welcome, {frank1: [keyPackageF, hpkePrivKeyF]}),
         ]);
 
-        const [mlsPlaintext, welcome2] = await groupA.commit(
+        const [mlsPlaintext1, ] = await groupA.commit(
             [new ProposalWrapper(new Remove(3))],
             credentialA,
             signingPrivKeyA,
         );
 
         await Promise.all([
-            groupB.applyCommit(mlsPlaintext),
-            groupC.applyCommit(mlsPlaintext),
-            groupE.applyCommit(mlsPlaintext),
-            groupF.applyCommit(mlsPlaintext),
+            groupB.applyCommit(mlsPlaintext1),
+            groupC.applyCommit(mlsPlaintext1),
+            groupE.applyCommit(mlsPlaintext1),
+            groupF.applyCommit(mlsPlaintext1),
         ]);
 
         expect(groupA.secrets).toEqual(groupB.secrets);
         expect(groupA.secrets).toEqual(groupC.secrets);
         expect(groupA.secrets).toEqual(groupE.secrets);
         expect(groupA.secrets).toEqual(groupF.secrets);
+
+        // D was removed, so he shouldn't be able to apply the commit
+        await expect(groupD.applyCommit(mlsPlaintext1)).rejects.toThrow("Could not decrypt path secret");
+
+        const [mlsPlaintext2, welcome2] = await groupB.commit(
+            [
+                new ProposalWrapper(new Remove(4)),
+                new ProposalWrapper(new Add(keyPackageD)),
+            ],
+            credentialB,
+            signingPrivKeyB,
+        );
+
+        await Promise.all([
+            groupA.applyCommit(mlsPlaintext2),
+            groupC.applyCommit(mlsPlaintext2),
+            groupF.applyCommit(mlsPlaintext2),
+        ]);
+
+        expect(groupA.secrets).toEqual(groupB.secrets);
+        expect(groupA.secrets).toEqual(groupC.secrets);
+        expect(groupA.secrets).toEqual(groupF.secrets);
+
+        const [, groupD2] = await Group.createFromWelcome(
+            welcome2, {dan1: [keyPackageD, hpkePrivKeyD]},
+        );
+
+        expect(groupA.secrets).toEqual(groupD2.secrets);
     });
 });

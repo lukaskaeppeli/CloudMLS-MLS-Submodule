@@ -20,7 +20,7 @@ limitations under the License.
  * https://github.com/mlswg/mls-protocol/blob/master/draft-ietf-mls-protocol.md#key-packages
  */
 
-import {ExtensionType, ProtocolVersion, NodeType} from "./constants";
+import {EMPTY_BYTE_ARRAY, ExtensionType, ProtocolVersion, NodeType} from "./constants";
 import {CipherSuite, cipherSuiteById} from "./ciphersuite";
 import {Credential} from "./credential";
 import {SigningPrivateKey} from "./signatures";
@@ -138,7 +138,7 @@ export class ParentNode {
         return tlspl.struct([
             tlspl.variableOpaque(this.publicKey, 2),
             tlspl.vector(this.unmergedLeaves.map(tlspl.uint32), 4),
-            tlspl.variableOpaque(this.parentHash, 1),
+            tlspl.variableOpaque(this.parentHash || EMPTY_BYTE_ARRAY /* FIXME: ??? */, 1),
         ]);
     }
 }
