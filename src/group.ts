@@ -43,11 +43,21 @@ export class Group {
         public confirmedTranscriptHash: Uint8Array,
         public interimTranscriptHash: Uint8Array,
         public ratchetTreeView: RatchetTreeView,
-        private secrets: Secrets,
+        public secrets: Secrets,
     ) {}
 
     get leafNum(): number {
         return this.ratchetTreeView.leafNum;
+    }
+
+    async getGroupContext(): Promise<GroupContext> {
+        return new GroupContext(
+            this.groupId,
+            this.epoch,
+            await this.ratchetTreeView.calculateTreeHash(),
+            this.confirmedTranscriptHash,
+            [], // FIXME: extensions -- same as groupInfo.extensions minus ratchettree?
+        );
     }
 
     /** Create a brand new group.
