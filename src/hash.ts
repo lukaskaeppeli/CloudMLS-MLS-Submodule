@@ -25,28 +25,53 @@ export interface Hash {
     verifyMac: (key: Uint8Array, data: Uint8Array, mac: Uint8Array) => Promise<boolean>;
 }
 
-function makeHash(name: string): Hash {
+function makeHash(name: string, blockSize: number): Hash {
+    let zeroKey; // a key consisting of blockSize 0's, which is the default key for mac
     return {
         async hash(data: Uint8Array): Promise<Uint8Array> {
             return new Uint8Array(await subtle.digest(name, data));
         },
         async mac(key: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
-            const cryptoKey = await subtle.importKey(
-                "raw", key, {name: "HMAC", hash: name, length: key.byteLength * 8},
-                false, ["sign"],
-            );
+            let cryptoKey;
+            if (key.length === 0) {
+                if (!zeroKey) {
+                    key =new Uint8Array(blockSize);
+                    zeroKey = await subtle.importKey(
+                        "raw", key, {name: "HMAC", hash: name, length: key.byteLength * 8},
+                        false, ["sign", "verify"],
+                    );
+                }
+                cryptoKey = zeroKey;
+            } else {
+                cryptoKey = await subtle.importKey(
+                    "raw", key, {name: "HMAC", hash: name, length: key.byteLength * 8},
+                    false, ["sign"],
+                );
+            }
             return new Uint8Array(await subtle.sign("HMAC", cryptoKey, data));
         },
         async verifyMac(key: Uint8Array, data: Uint8Array, mac: Uint8Array): Promise<boolean> {
-            const cryptoKey = await subtle.importKey(
-                "raw", key, {name: "HMAC", hash: name, length: key.byteLength * 8},
-                false, ["verify"],
-            );
+            let cryptoKey;
+            if (key.length === 0) {
+                if (!zeroKey) {
+                    key =new Uint8Array(blockSize);
+                    zeroKey = await subtle.importKey(
+                        "raw", key, {name: "HMAC", hash: name, length: key.byteLength * 8},
+                        false, ["sign", "verify"],
+                    );
+                }
+                cryptoKey = zeroKey;
+            } else {
+                cryptoKey = await subtle.importKey(
+                    "raw", key, {name: "HMAC", hash: name, length: key.byteLength * 8},
+                    false, ["verify"],
+                );
+            }
             return await subtle.verify("HMAC", cryptoKey, mac, data);
         },
     }
 }
 
-export const sha256: Hash = makeHash("SHA-256");
+export const sha256: Hash = makeHash("SHA-256", 64);
 
-export const sha512: Hash = makeHash("SHA-512");
+export const sha512: Hash = makeHash("SHA-512", 128);
