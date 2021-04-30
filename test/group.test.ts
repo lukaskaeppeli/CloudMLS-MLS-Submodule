@@ -119,7 +119,7 @@ describe("Group", () => {
             Group.createFromWelcome(welcome, {frank1: [keyPackageF, hpkePrivKeyF]}),
         ]);
 
-        const [mlsPlaintext1, ] = await groupA.commit(
+        const [mlsPlaintext1, , ] = await groupA.commit(
             [new ProposalWrapper(new Remove(3))],
             credentialA,
             signingPrivKeyA,
@@ -140,7 +140,7 @@ describe("Group", () => {
         // D was removed, so he shouldn't be able to apply the commit
         await expect(groupD.applyCommit(mlsPlaintext1)).rejects.toThrow("Could not decrypt path secret");
 
-        const [mlsPlaintext2, welcome2] = await groupB.commit(
+        const [mlsPlaintext2, welcome2, ] = await groupB.commit(
             [
                 new ProposalWrapper(new Remove(4)),
                 new ProposalWrapper(new Add(keyPackageD)),

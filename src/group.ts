@@ -353,7 +353,7 @@ export class Group {
         proposals: ProposalWrapper[],
         credential: Credential,
         signingPrivateKey: SigningPrivateKey,
-    ): Promise<[MLSPlaintext, Welcome]> {
+    ): Promise<[MLSPlaintext, Welcome, number[]]> {
         // unwrap the proposals
         // FIXME: allow proposal references too
         // FIXME: enforce ordering of proposals
@@ -506,12 +506,12 @@ export class Group {
         this.ratchetTreeView = ratchetTreeView2;
         this.secrets = secrets;
 
-        return [plaintext, welcome];
+        return [plaintext, welcome, addPositions];
     }
 
     async applyCommit(
         plaintext: MLSPlaintext,
-    ): Promise<void> {
+    ): Promise<number[]> {
         if (!(plaintext.content instanceof Commit)) {
             throw new Error("must be a Commit");
         }
@@ -530,7 +530,7 @@ export class Group {
             bareProposals.some((proposal) => { return !(proposal instanceof Add); })
 
         // eslint-disable-next-line comma-dangle, array-bracket-spacing
-        const [ratchetTreeView1, ] =
+        const [ratchetTreeView1, addPositions] =
             await this.ratchetTreeView.applyProposals(bareProposals);
 
         let commitSecret = EMPTY_BYTE_ARRAY; // FIXME: should be 0 vector of the right length
@@ -592,6 +592,8 @@ export class Group {
         this.interimTranscriptHash = interimTranscriptHash;
         this.ratchetTreeView = ratchetTreeView2;
         this.secrets = secrets;
+
+        return addPositions;
     }
 }
 
