@@ -219,7 +219,7 @@ export class Group {
          * for the next 2^i leaves.
          */
         const recipients: {keyPackage: KeyPackage, pathSecret: Uint8Array}[] = [];
-        for (let i = 0; 1 << i < otherMembers.length; i++) {
+        for (let i = 0; (1 << i - 1) <= otherMembers.length; i++) {
             const numRecipients = 1 << i;
             const maxRecipients = otherMembers.length - numRecipients + 1;
             for (let j = 0; j < numRecipients && j < maxRecipients; j++) {
