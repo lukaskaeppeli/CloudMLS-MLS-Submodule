@@ -241,6 +241,23 @@ export class Tree<T> {
         return new NodeIterator<T>(this.root);
     }
 
+    leaf(leafNum: number): T {
+        let node: Node<T> = this.root;
+        for (const dir of (new PathDirectionIterator(this.size, leafNum))) {
+            if (!(node instanceof Internal)) {
+                throw new Error("Tree is corrupted");
+            } else if (dir) {
+                node = node.rightChild;
+            } else {
+                node = node.leftChild;
+            }
+        }
+        if (!(node instanceof Leaf)) {
+            throw new Error("Tree is corrupted");
+        }
+        return node.data;
+    }
+
     pathToLeafNum(leafNum: number): PathIterator<T, Node<T>> {
         return new PathIterator(
             this.size, leafNum,
