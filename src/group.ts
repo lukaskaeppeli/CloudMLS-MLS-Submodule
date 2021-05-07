@@ -14,16 +14,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import {Secrets, generateSecrets, generateSecretsFromJoinerSecret} from "./keyschedule";
+import {
+    HashRatchet,
+    Secrets,
+    SecretTree,
+    generateSecrets,
+    generateSecretsFromJoinerSecret,
+} from "./keyschedule";
 import {NodeData, RatchetTreeView} from "./ratchettree";
 import {Extension, KeyPackage, RatchetTree} from "./keypackage";
 import {CipherSuite} from "./ciphersuite";
 import {KEMPrivateKey} from "./hpke/base";
 import {SigningPrivateKey} from "./signatures";
 import {Tree} from "./lbbtree";
-import {MLSPlaintext, Add, Commit, ProposalWrapper, Sender, UpdatePath} from "./message";
+import {
+    MLSPlaintext,
+    MLSCiphertext,
+    Add,
+    Commit,
+    ProposalWrapper,
+    Sender,
+    UpdatePath,
+} from "./message";
 import {concatUint8Array, eqUint8Array} from "./util";
-import {EMPTY_BYTE_ARRAY, ProtocolVersion, SenderType} from "./constants";
+import {EMPTY_BYTE_ARRAY, ContentType, ProtocolVersion, SenderType} from "./constants";
 import {Credential} from "./credential";
 import {GroupInfo, Welcome} from "./welcome";
 import * as tlspl from "./tlspl";
@@ -33,6 +47,7 @@ import {commonAncestor, directPath} from "./treemath";
  */
 
 export class Group {
+    private hashRatchets: Record<number, [HashRatchet, HashRatchet]>;
     constructor(
         readonly version: ProtocolVersion,
         readonly cipherSuite: CipherSuite,
@@ -44,7 +59,10 @@ export class Group {
         public interimTranscriptHash: Uint8Array,
         public ratchetTreeView: RatchetTreeView,
         public secrets: Secrets,
-    ) {}
+        private secretTree: SecretTree,
+    ) {
+        this.hashRatchets = {};
+    }
 
     get leafNum(): number {
         return this.ratchetTreeView.leafNum;
@@ -179,6 +197,12 @@ export class Group {
                 confirmedTranscriptHash,
             );
 
+        const secretTree = new SecretTree(
+            cipherSuite,
+            secrets.encryptionSecret,
+            ratchetTreeView2.tree.size,
+        );
+
         const group = new Group(
             version,
             cipherSuite,
@@ -190,6 +214,7 @@ export class Group {
             interimTranscriptHash,
             ratchetTreeView2,
             secrets,
+            secretTree,
         );
 
         // make welcome messages
@@ -327,6 +352,12 @@ export class Group {
             groupContext,
         );
 
+        const secretTree = new SecretTree(
+            cipherSuite,
+            secrets.encryptionSecret,
+            ratchetTreeView.tree.size,
+        );
+
         const interimTranscriptHash = await calculateInterimTranscriptHash(
             cipherSuite,
             groupInfo,
@@ -344,6 +375,7 @@ export class Group {
             interimTranscriptHash,
             ratchetTreeView,
             secrets,
+            secretTree,
         );
 
         return [keyId, group];
@@ -353,7 +385,7 @@ export class Group {
         proposals: ProposalWrapper[],
         credential: Credential,
         signingPrivateKey: SigningPrivateKey,
-    ): Promise<[MLSPlaintext, Welcome, number[]]> {
+    ): Promise<[MLSCiphertext, MLSPlaintext, Welcome, number[]]> {
         // unwrap the proposals
         // FIXME: allow proposal references too
         // FIXME: enforce ordering of proposals
@@ -463,6 +495,8 @@ export class Group {
                 confirmedTranscriptHash,
             );
 
+        const ciphertext = await this.encryptMlsPlaintext(plaintext);
+
         // make welcome messages
         let recipients: {keyPackage: KeyPackage, pathSecret?: Uint8Array}[];
         if (pathSecrets.length) {
@@ -505,8 +539,14 @@ export class Group {
         this.interimTranscriptHash = interimTranscriptHash;
         this.ratchetTreeView = ratchetTreeView2;
         this.secrets = secrets;
+        this.secretTree = new SecretTree(
+            this.cipherSuite,
+            secrets.encryptionSecret,
+            ratchetTreeView2.tree.size,
+        );
+        this.hashRatchets = {};
 
-        return [plaintext, welcome, addPositions];
+        return [ciphertext, plaintext, welcome, addPositions];
     }
 
     async applyCommit(
@@ -592,8 +632,69 @@ export class Group {
         this.interimTranscriptHash = interimTranscriptHash;
         this.ratchetTreeView = ratchetTreeView2;
         this.secrets = secrets;
+        this.secretTree = new SecretTree(
+            this.cipherSuite,
+            secrets.encryptionSecret,
+            ratchetTreeView2.tree.size,
+        );
+        this.hashRatchets = {};
 
         return addPositions;
+    }
+
+    async encrypt(data: Uint8Array, authenticatedData: Uint8Array, signingKey: SigningPrivateKey): Promise<MLSCiphertext> {
+        const context = await this.getGroupContext();
+        const mlsPlaintext = await MLSPlaintext.create(
+            this.cipherSuite,
+            this.groupId,
+            this.epoch,
+            new Sender(SenderType.Member, this.leafNum),
+            authenticatedData,
+            data,
+            signingKey,
+            context,
+        );
+        await mlsPlaintext.calculateTags(
+            this.cipherSuite,
+            this.secrets.confirmationKey,
+            this.secrets.membershipKey,
+            context,
+        );
+        return await this.encryptMlsPlaintext(mlsPlaintext);
+    }
+
+    async encryptMlsPlaintext(mlsPlaintext: MLSPlaintext): Promise<MLSCiphertext> {
+        const ratchetNum = mlsPlaintext.content instanceof Uint8Array ? 1 : 0;
+        if (!this.hashRatchets[this.leafNum]) {
+            this.hashRatchets[this.leafNum] =
+                await this.secretTree.getRatchetsForLeaf(this.leafNum);
+        }
+        return await MLSCiphertext.create(
+            this.cipherSuite,
+            mlsPlaintext,
+            this.hashRatchets[this.leafNum][ratchetNum],
+            this.secrets.senderDataSecret,
+        );
+    }
+
+    async decrypt(mlsCiphertext: MLSCiphertext): Promise<MLSPlaintext> {
+        // FIXME: assert that mlsCiphertext.groupId matches this.epoch
+        // FIXME: assert that mlsCiphertext.epoch matches this.epoch
+        // FIXME: verify
+        const ratchetNum = mlsCiphertext.contentType == ContentType.Application ? 1 : 0;
+        return await mlsCiphertext.decrypt(
+            this.cipherSuite,
+            async (sender) => {
+                if (sender >= this.ratchetTreeView.tree.size) {
+                    throw new Error("Invalid sender");
+                }
+                if (!(sender in this.hashRatchets)) {
+                    this.hashRatchets[sender] = await this.secretTree.getRatchetsForLeaf(sender);
+                }
+                return this.hashRatchets[sender][ratchetNum];
+            },
+            this.secrets.senderDataSecret,
+        );
     }
 }
 
