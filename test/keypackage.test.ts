@@ -16,9 +16,9 @@ limitations under the License.
 
 import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
 import {BasicCredential} from "../src/credential";
-import {KeyPackage} from "../src/keypackage";
+import {KeyPackage, ParentHash} from "../src/keypackage";
 import {HPKECiphertext} from "../src/message";
-import {SignatureScheme, ProtocolVersion} from "../src/constants";
+import {EMPTY_BYTE_ARRAY, SignatureScheme, ProtocolVersion} from "../src/constants";
 import {stringToUint8Array} from "../src/util";
 import * as tlspl from "../src/tlspl";
 
@@ -41,7 +41,7 @@ describe("key package", () => {
             cipherSuite,
             await hpkePubKey.serialize(),
             credential,
-            [],
+            [new ParentHash(EMPTY_BYTE_ARRAY)],
             signingPrivKey,
         );
 
@@ -49,6 +49,7 @@ describe("key package", () => {
 
         // eslint-disable-next-line comma-dangle, array-bracket-spacing
         const [[decodedKeyPackage], ] = tlspl.decode([KeyPackage.decode], encodedKeyPackage);
+        expect(decodedKeyPackage.extensions.length).toEqual(1);
         expect(await decodedKeyPackage.checkSignature()).toBe(true);
 
         // if we mangle the signature, it shouldn't verify

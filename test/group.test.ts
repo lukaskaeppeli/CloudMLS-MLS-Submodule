@@ -18,7 +18,7 @@ import {Group} from "../src/group";
 import {BasicCredential} from "../src/credential";
 import {KeyPackage} from "../src/keypackage";
 import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
-import {ProtocolVersion} from "../src/constants";
+import {EMPTY_BYTE_ARRAY, ProtocolVersion} from "../src/constants";
 import {stringToUint8Array} from "../src/util";
 import {Add, Remove, ProposalWrapper} from "../src/message";
 
@@ -164,5 +164,103 @@ describe("Group", () => {
         );
 
         expect(groupA.secrets).toEqual(groupD2.secrets);
+    });
+
+    it("should encrypt and decrypt", async () => {
+        const [
+            [signingPrivKeyA, hpkePrivKeyA, credentialA, keyPackageA],
+            [signingPrivKeyB, hpkePrivKeyB, credentialB, keyPackageB],
+            [signingPrivKeyC, hpkePrivKeyC, credentialC, keyPackageC],
+            [signingPrivKeyD, hpkePrivKeyD, credentialD, keyPackageD],
+            [signingPrivKeyE, hpkePrivKeyE, credentialE, keyPackageE],
+            [signingPrivKeyF, hpkePrivKeyF, credentialF, keyPackageF],
+        ] = await Promise.all([
+            makeKeyPackage("@alice:example.org"),
+            makeKeyPackage("@bob:example.org"),
+            makeKeyPackage("@carol:example.org"),
+            makeKeyPackage("@dan:example.org"),
+            makeKeyPackage("@erin:example.org"),
+            makeKeyPackage("@frank:example.org"),
+        ]);
+
+        const [groupA, , welcome] = await Group.createNew(
+            ProtocolVersion.Mls10,
+            cipherSuite,
+            stringToUint8Array("groupid"),
+            credentialA,
+            signingPrivKeyA,
+            [keyPackageB, keyPackageC, keyPackageD, keyPackageE, keyPackageF],
+        );
+
+        const [[keyB, groupB], [keyC, groupC], [keyD, groupD], [keyE, groupE], [keyF, groupF]] = await Promise.all([
+            Group.createFromWelcome(welcome, {bob1: [keyPackageB, hpkePrivKeyB]}),
+            Group.createFromWelcome(welcome, {carol1: [keyPackageC, hpkePrivKeyC]}),
+            Group.createFromWelcome(welcome, {dan1: [keyPackageD, hpkePrivKeyD]}),
+            Group.createFromWelcome(welcome, {erin1: [keyPackageE, hpkePrivKeyE]}),
+            Group.createFromWelcome(welcome, {frank1: [keyPackageF, hpkePrivKeyF]}),
+        ]);
+
+        const [mlsCiphertext1, , , ] = await groupA.commit(
+            [new ProposalWrapper(new Remove(3))],
+            credentialA,
+            signingPrivKeyA,
+        );
+
+        await Promise.all([
+            groupB.applyCommit(await groupB.decrypt(mlsCiphertext1)),
+            groupC.applyCommit(await groupC.decrypt(mlsCiphertext1)),
+            groupE.applyCommit(await groupE.decrypt(mlsCiphertext1)),
+            groupF.applyCommit(await groupF.decrypt(mlsCiphertext1)),
+        ]);
+
+        expect(groupA.secrets).toEqual(groupB.secrets);
+        expect(groupA.secrets).toEqual(groupC.secrets);
+        expect(groupA.secrets).toEqual(groupE.secrets);
+        expect(groupA.secrets).toEqual(groupF.secrets);
+
+        // D was removed, so he shouldn't be able to apply the commit
+        await expect(groupD.applyCommit(await groupD.decrypt(mlsCiphertext1)))
+            .rejects.toThrow("Could not decrypt path secret");
+
+        const message1 = stringToUint8Array("message1");
+        const mlsCiphertextM1 = await groupE.encrypt(message1, EMPTY_BYTE_ARRAY, signingPrivKeyE);
+
+        expect((await groupA.decrypt(mlsCiphertextM1)).content).toEqual(message1);
+        expect((await groupB.decrypt(mlsCiphertextM1)).content).toEqual(message1);
+        expect((await groupC.decrypt(mlsCiphertextM1)).content).toEqual(message1);
+        expect((await groupF.decrypt(mlsCiphertextM1)).content).toEqual(message1);
+
+        const [mlsCiphertext2, , welcome2, ] = await groupB.commit(
+            [
+                new ProposalWrapper(new Remove(4)),
+                new ProposalWrapper(new Add(keyPackageD)),
+            ],
+            credentialB,
+            signingPrivKeyB,
+        );
+
+        await Promise.all([
+            groupA.applyCommit(await groupA.decrypt(mlsCiphertext2)),
+            groupC.applyCommit(await groupC.decrypt(mlsCiphertext2)),
+            groupF.applyCommit(await groupF.decrypt(mlsCiphertext2)),
+        ]);
+
+        expect(groupA.secrets).toEqual(groupB.secrets);
+        expect(groupA.secrets).toEqual(groupC.secrets);
+        expect(groupA.secrets).toEqual(groupF.secrets);
+
+        const [, groupD2] = await Group.createFromWelcome(
+            welcome2, {dan1: [keyPackageD, hpkePrivKeyD]},
+        );
+
+        expect(groupA.secrets).toEqual(groupD2.secrets);
+
+        const message2 = stringToUint8Array("message2");
+        const mlsCiphertextM2 = await groupD2.encrypt(message2, EMPTY_BYTE_ARRAY, signingPrivKeyD);
+
+        expect((await groupA.decrypt(mlsCiphertextM2)).content).toEqual(message2);
+        expect((await groupB.decrypt(mlsCiphertextM2)).content).toEqual(message2);
+        expect((await groupC.decrypt(mlsCiphertextM2)).content).toEqual(message2);
+        expect((await groupF.decrypt(mlsCiphertextM2)).content).toEqual(message2);
     });
 });

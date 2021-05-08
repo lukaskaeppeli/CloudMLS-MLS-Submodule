@@ -48,6 +48,12 @@ export abstract class Extension {
                 const [extension, ] = RatchetTree.decode(extensionData);
                 return [extension, offset1];
             }
+            case ExtensionType.ParentHash:
+            {
+                // eslint-disable-next-line comma-dangle, array-bracket-spacing
+                const [extension, ] = ParentHash.decode(extensionData);
+                return [extension, offset1];
+            }
             default:
                 return [new UnknownExtension(extensionType, extensionData), offset1];
         }
@@ -206,8 +212,9 @@ export class KeyPackage {
         readonly hpkeInitKey: Uint8Array,
         readonly credential: Credential,
         readonly extensions: Extension[],
-        readonly unsignedEncoding: Uint8Array,
-        readonly signature: Uint8Array,
+        public unsignedEncoding: Uint8Array,
+        public signature: Uint8Array,
+        readonly signingKey?: SigningPrivateKey,
     ) {}
 
     static async create(
@@ -228,7 +235,7 @@ export class KeyPackage {
         const signature: Uint8Array = await signingKey.sign(unsignedEncoding);
         return new KeyPackage(
             version, cipherSuite, hpkeInitKey, credential, extensions,
-            unsignedEncoding, signature,
+            unsignedEncoding, signature, signingKey,
         );
     }
 
@@ -240,6 +247,21 @@ export class KeyPackage {
             this.hpkeKey = await this.cipherSuite.hpke.kem.deserializePublic(this.hpkeInitKey);
         }
         return this.hpkeKey;
+    }
+
+    async addExtension(extension: Extension): Promise<void> {
+        if (!this.signingKey) {
+            throw new Error("Cannot change extensions without a signing key");
+        }
+        this.extensions.push(extension);
+        this.unsignedEncoding = tlspl.encode([
+            tlspl.uint8(this.version),
+            tlspl.uint16(this.cipherSuite.id),
+            tlspl.variableOpaque(this.hpkeInitKey, 2),
+            this.credential.encoder,
+            tlspl.vector(this.extensions.map(ext => ext.encoder), 4),
+        ]);
+        this.signature = await this.signingKey.sign(this.unsignedEncoding);
     }
 
     async hash(): Promise<Uint8Array> {

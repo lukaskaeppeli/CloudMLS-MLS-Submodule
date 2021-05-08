@@ -397,7 +397,7 @@ export class RatchetTreeView {
                 parentHash = await this.cipherSuite.hash.hash(encoded);
             }
         }
-        keyPackage.extensions.push(new ParentHash(parentHash));
+        await keyPackage.addExtension(new ParentHash(parentHash));
 
         // generate UpdatePath message
         const updatePath = new UpdatePath(keyPackage, updatePathNodes);

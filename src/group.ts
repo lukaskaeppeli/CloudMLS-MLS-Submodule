@@ -326,7 +326,6 @@ export class Group {
 
         // check the signature on all the key packages
         // FIXME: this doesn't work??
-        /*
         await Promise.all(
             ratchetTreeView.keyPackages.map(async (keyPackage, idx) => {
                 if (keyPackage !== undefined && !(await keyPackage.checkSignature())) {
@@ -335,7 +334,6 @@ export class Group {
                 }
             }),
         );
-        */
 
         const groupContext = new GroupContext(
             groupInfo.groupId,
