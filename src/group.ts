@@ -678,8 +678,12 @@ export class Group {
     }
 
     async decrypt(mlsCiphertext: MLSCiphertext): Promise<MLSPlaintext> {
-        // FIXME: assert that mlsCiphertext.groupId matches this.epoch
-        // FIXME: assert that mlsCiphertext.epoch matches this.epoch
+        if (!eqUint8Array(this.groupId, mlsCiphertext.groupId)) {
+            throw new Error("Encrypted for the wrong group.");
+        }
+        if (this.epoch != mlsCiphertext.epoch) {
+            throw new Error("Wrong epoch.");
+        }
         // FIXME: verify
         const ratchetNum = mlsCiphertext.contentType == ContentType.Application ? 1 : 0;
         return await mlsCiphertext.decrypt(
