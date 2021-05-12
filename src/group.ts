@@ -21,6 +21,7 @@ import {
     generateSecrets,
     generateSecretsFromJoinerSecret,
 } from "./keyschedule";
+import {Epoch, eqEpoch, encodeEpoch, decodeEpoch} from "./epoch";
 import {NodeData, RatchetTreeView} from "./ratchettree";
 import {Extension, KeyPackage, RatchetTree} from "./keypackage";
 import {CipherSuite} from "./ciphersuite";
@@ -52,7 +53,7 @@ export class Group {
         readonly version: ProtocolVersion,
         readonly cipherSuite: CipherSuite,
         readonly groupId: Uint8Array,
-        public epoch: number,
+        public epoch: Epoch,
         readonly extensions: Extension[],
         private hpkeKey: KEMPrivateKey,
         public confirmedTranscriptHash: Uint8Array,
@@ -414,6 +415,8 @@ export class Group {
         const pathRequired = bareProposals.length == 0 ||
             bareProposals.some((proposal) => { return !(proposal instanceof Add); })
 
+        const nextEpoch = this.epoch + 1;
+
         let updatePath: UpdatePath;
         let commitSecret: Uint8Array = EMPTY_BYTE_ARRAY; // FIXME: should be 0 vector of the right length
         let pathSecrets: Uint8Array[] = [];
@@ -421,7 +424,7 @@ export class Group {
         if (pathRequired) {
             const provisionalGroupContext = new GroupContext(
                 this.groupId,
-                this.epoch, // FIXME: or epoch + 1?
+                this.epoch, // FIXME: or nextEpoch?
                 await ratchetTreeView1.calculateTreeHash(),
                 this.confirmedTranscriptHash,
                 this.extensions,
@@ -465,7 +468,7 @@ export class Group {
 
         const newGroupContext = new GroupContext(
             this.groupId,
-            this.epoch + 1,
+            nextEpoch,
             await ratchetTreeView2.calculateTreeHash(),
             confirmedTranscriptHash,
             this.extensions,
@@ -515,7 +518,7 @@ export class Group {
         }
         const groupInfo = await GroupInfo.create(
             this.groupId,
-            this.epoch + 1,
+            nextEpoch,
             await ratchetTreeView2.calculateTreeHash(),
             confirmedTranscriptHash,
             // FIXME: other extensions?
@@ -532,7 +535,7 @@ export class Group {
             recipients,
         );
 
-        this.epoch++;
+        this.epoch = nextEpoch;
         this.confirmedTranscriptHash = confirmedTranscriptHash;
         this.interimTranscriptHash = interimTranscriptHash;
         this.ratchetTreeView = ratchetTreeView2;
@@ -553,7 +556,7 @@ export class Group {
         if (!(plaintext.content instanceof Commit)) {
             throw new Error("must be a Commit");
         }
-        if (plaintext.epoch !== this.epoch) {
+        if (!eqEpoch(plaintext.epoch, this.epoch)) {
             throw new Error(`Wrong epoch: expected ${this.epoch}, got ${plaintext.epoch}`);
         }
 
@@ -571,12 +574,14 @@ export class Group {
         const [ratchetTreeView1, addPositions] =
             await this.ratchetTreeView.applyProposals(bareProposals);
 
+        const nextEpoch = this.epoch + 1;
+
         let commitSecret = EMPTY_BYTE_ARRAY; // FIXME: should be 0 vector of the right length
         let ratchetTreeView2 = ratchetTreeView1;
         if (commit.updatePath) {
             const provisionalGroupContext = new GroupContext(
                 this.groupId,
-                this.epoch, // FIXME: or epoch + 1?
+                this.epoch, // FIXME: or nextEpoch?
                 await ratchetTreeView1.calculateTreeHash(),
                 this.confirmedTranscriptHash,
                 this.extensions,
@@ -600,7 +605,7 @@ export class Group {
 
         const newGroupContext = new GroupContext(
             this.groupId,
-            this.epoch + 1,
+            nextEpoch,
             await ratchetTreeView2.calculateTreeHash(),
             confirmedTranscriptHash,
             this.extensions,
@@ -625,7 +630,7 @@ export class Group {
             throw new Error("Confirmation tag does not match");
         }
 
-        this.epoch++;
+        this.epoch = nextEpoch;
         this.confirmedTranscriptHash = confirmedTranscriptHash;
         this.interimTranscriptHash = interimTranscriptHash;
         this.ratchetTreeView = ratchetTreeView2;
@@ -679,7 +684,7 @@ export class Group {
         if (!eqUint8Array(this.groupId, mlsCiphertext.groupId)) {
             throw new Error("Encrypted for the wrong group.");
         }
-        if (this.epoch != mlsCiphertext.epoch) {
+        if (!eqEpoch(this.epoch, mlsCiphertext.epoch)) {
             throw new Error("Wrong epoch.");
         }
         // FIXME: verify
@@ -705,7 +710,7 @@ export class Group {
 export class GroupContext {
     constructor(
         readonly groupId: Uint8Array,
-        readonly epoch: number,
+        readonly epoch: Epoch,
         readonly treeHash: Uint8Array,
         readonly confirmedTranscriptHash: Uint8Array,
         readonly extensions: Extension[],
@@ -718,7 +723,7 @@ export class GroupContext {
         ] = tlspl.decode(
             [
                 tlspl.decodeVariableOpaque(1),
-                tlspl.decodeUint64,
+                decodeEpoch,
                 tlspl.decodeVariableOpaque(1),
                 tlspl.decodeVariableOpaque(1),
                 tlspl.decodeVector(Extension.decode, 4),
@@ -733,7 +738,7 @@ export class GroupContext {
     get encoder(): tlspl.Encoder {
         return tlspl.struct([
             tlspl.variableOpaque(this.groupId, 1),
-            tlspl.uint64(this.epoch),
+            encodeEpoch(this.epoch),
             tlspl.variableOpaque(this.treeHash, 1),
             tlspl.variableOpaque(this.confirmedTranscriptHash, 1),
             tlspl.vector(this.extensions.map(x => x.encoder), 4),

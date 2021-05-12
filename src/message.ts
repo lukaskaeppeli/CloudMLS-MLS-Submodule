@@ -18,6 +18,7 @@ limitations under the License.
  */
 
 import {HPKE, KEMPublicKey, KEMPrivateKey} from "./hpke/base";
+import {Epoch, decodeEpoch, encodeEpoch} from "./epoch";
 import {eqUint8Array} from "./util";
 import {EMPTY_BYTE_ARRAY, NONCE, KEY, ContentType, SenderType, ProposalType, ProposalOrRefType} from "./constants";
 import {KeyPackage} from "./keypackage";
@@ -128,7 +129,7 @@ export class MLSPlaintext {
     readonly contentType: ContentType;
     constructor(
         readonly groupId: Uint8Array,
-        readonly epoch: number,
+        readonly epoch: Epoch,
         readonly sender: Sender,
         readonly authenticatedData: Uint8Array,
         readonly content: Uint8Array | Proposal | Commit,
@@ -165,7 +166,7 @@ export class MLSPlaintext {
     static async create(
         cipherSuite: CipherSuite,
         groupId: Uint8Array,
-        epoch: number,
+        epoch: Epoch,
         sender: Sender,
         authenticatedData: Uint8Array,
         content: Uint8Array | Proposal | Commit,
@@ -179,7 +180,7 @@ export class MLSPlaintext {
         const mlsPlaintextTBS: Uint8Array = tlspl.encode([
             (sender.senderType === SenderType.Member ? context.encoder : tlspl.empty),
             tlspl.variableOpaque(groupId, 1),
-            tlspl.uint64(epoch),
+            encodeEpoch(epoch),
             sender.encoder,
             tlspl.variableOpaque(authenticatedData, 4),
             tlspl.uint8(contentType),
@@ -217,7 +218,7 @@ export class MLSPlaintext {
                 context.encoder :
                 tlspl.empty),
             tlspl.variableOpaque(this.groupId, 1),
-            tlspl.uint64(this.epoch),
+            encodeEpoch(this.epoch),
             this.sender.encoder,
             tlspl.variableOpaque(this.authenticatedData, 4),
             tlspl.uint8(this.contentType),
@@ -255,7 +256,7 @@ export class MLSPlaintext {
         const mlsPlaintextTBS: Uint8Array = tlspl.encode([
             (this.sender.senderType === SenderType.Member ? context.encoder : tlspl.empty),
             tlspl.variableOpaque(this.groupId, 1),
-            tlspl.uint64(this.epoch),
+            encodeEpoch(this.epoch),
             this.sender.encoder,
             tlspl.variableOpaque(this.authenticatedData, 4),
             tlspl.uint8(this.contentType),
@@ -306,7 +307,7 @@ export class MLSPlaintext {
         const [[groupId, epoch, sender, authenticatedData, contentType], offset1] = tlspl.decode(
             [
                 tlspl.decodeVariableOpaque(1),
-                tlspl.decodeUint64,
+                decodeEpoch,
                 Sender.decode,
                 tlspl.decodeVariableOpaque(4),
                 tlspl.decodeUint8,
@@ -332,7 +333,7 @@ export class MLSPlaintext {
     get encoder(): tlspl.Encoder {
         return tlspl.struct([
             tlspl.variableOpaque(this.groupId, 1),
-            tlspl.uint64(this.epoch),
+            encodeEpoch(this.epoch),
             this.sender.encoder,
             tlspl.variableOpaque(this.authenticatedData, 4),
             tlspl.uint8(this.contentType),
@@ -358,7 +359,7 @@ export class MLSPlaintext {
         }
         return tlspl.struct([
             tlspl.variableOpaque(this.groupId, 1),
-            tlspl.uint64(this.epoch),
+            encodeEpoch(this.epoch),
             this.sender.encoder,
             // FIXME: tlspl.variableOpaque(this.authenticatedData, 4),
             tlspl.uint8(this.contentType),
@@ -373,7 +374,7 @@ export class MLSPlaintext {
 export class MLSCiphertext {
     constructor(
         readonly groupId: Uint8Array,
-        readonly epoch: number,
+        readonly epoch: Epoch,
         readonly contentType: ContentType,
         readonly authenticatedData: Uint8Array,
         readonly encryptedSenderData: Uint8Array,
@@ -405,7 +406,7 @@ export class MLSCiphertext {
         ]);
         const mlsCiphertextContentAad = tlspl.encode([
             tlspl.variableOpaque(plaintext.groupId, 1),
-            tlspl.uint64(plaintext.epoch),
+            encodeEpoch(plaintext.epoch),
             tlspl.uint8(plaintext.contentType),
             tlspl.variableOpaque(plaintext.authenticatedData, 4),
         ]);
@@ -432,7 +433,7 @@ export class MLSCiphertext {
         ]);
         const mlsSenderDataAad = tlspl.encode([
             tlspl.variableOpaque(plaintext.groupId, 1),
-            tlspl.uint64(plaintext.epoch),
+            encodeEpoch(plaintext.epoch),
             tlspl.uint8(plaintext.contentType),
         ]);
         const ciphertextSample = ciphertext.subarray(0, hpke.kdf.extractLength);
@@ -465,7 +466,7 @@ export class MLSCiphertext {
         // decrypt sender
         const mlsSenderDataAad = tlspl.encode([
             tlspl.variableOpaque(this.groupId, 1),
-            tlspl.uint64(this.epoch),
+            encodeEpoch(this.epoch),
             tlspl.uint8(this.contentType),
         ]);
         const ciphertextSample = this.ciphertext.subarray(0, hpke.kdf.extractLength);
@@ -493,7 +494,7 @@ export class MLSCiphertext {
         // decrypt content
         const mlsCiphertextContentAad = tlspl.encode([
             tlspl.variableOpaque(this.groupId, 1),
-            tlspl.uint64(this.epoch),
+            encodeEpoch(this.epoch),
             tlspl.uint8(this.contentType),
             tlspl.variableOpaque(this.authenticatedData, 4),
         ]);
@@ -541,7 +542,7 @@ export class MLSCiphertext {
         ] = tlspl.decode(
             [
                 tlspl.decodeVariableOpaque(1),
-                tlspl.decodeUint8,
+                decodeEpoch,
                 tlspl.decodeUint8,
                 tlspl.decodeVariableOpaque(4),
                 tlspl.decodeVariableOpaque(1),
@@ -560,7 +561,7 @@ export class MLSCiphertext {
     get encoder(): tlspl.Encoder {
         return tlspl.struct([
             tlspl.variableOpaque(this.groupId, 1),
-            tlspl.uint8(this.epoch),
+            encodeEpoch(this.epoch),
             tlspl.uint8(this.contentType),
             tlspl.variableOpaque(this.authenticatedData, 4),
             tlspl.variableOpaque(this.encryptedSenderData, 1),

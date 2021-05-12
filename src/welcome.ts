@@ -20,6 +20,7 @@ limitations under the License.
  */
 
 import {eqUint8Array} from "./util";
+import {Epoch, decodeEpoch, encodeEpoch} from "./epoch";
 import {KEMPrivateKey} from "./hpke/base";
 import {deriveSecret} from "./keyschedule";
 import {EMPTY_BYTE_ARRAY, MEMBER, WELCOME, NONCE, KEY} from "./constants";
@@ -33,7 +34,7 @@ import * as tlspl from "./tlspl";
 export class GroupInfo {
     constructor(
         readonly groupId: Uint8Array,
-        readonly epoch: number,
+        readonly epoch: Epoch,
         readonly treeHash: Uint8Array,
         readonly confirmedTranscriptHash: Uint8Array,
         readonly extensions: Extension[],
@@ -45,7 +46,7 @@ export class GroupInfo {
 
     static async create(
         groupId: Uint8Array,
-        epoch: number,
+        epoch: Epoch,
         treeHash: Uint8Array,
         confirmedTranscriptHash: Uint8Array,
         extensions: Extension[],
@@ -55,7 +56,7 @@ export class GroupInfo {
     ): Promise<GroupInfo> {
         const unsignedEncoding: Uint8Array = tlspl.encode([
             tlspl.variableOpaque(groupId, 1),
-            tlspl.uint64(epoch),
+            encodeEpoch(epoch),
             tlspl.variableOpaque(treeHash, 1),
             tlspl.variableOpaque(confirmedTranscriptHash, 1),
             tlspl.vector(extensions.map(ext => ext.encoder), 4),
@@ -83,7 +84,7 @@ export class GroupInfo {
         ] = tlspl.decode(
             [
                 tlspl.decodeVariableOpaque(1),
-                tlspl.decodeUint64,
+                decodeEpoch,
                 tlspl.decodeVariableOpaque(1),
                 tlspl.decodeVariableOpaque(1),
                 tlspl.decodeVector(Extension.decode, 4),
@@ -107,7 +108,7 @@ export class GroupInfo {
     get encoder(): tlspl.Encoder {
         return tlspl.struct([
             tlspl.variableOpaque(this.groupId, 1),
-            tlspl.uint64(this.epoch),
+            encodeEpoch(this.epoch),
             tlspl.variableOpaque(this.treeHash, 1),
             tlspl.variableOpaque(this.confirmedTranscriptHash, 1),
             tlspl.vector(this.extensions.map(ext => ext.encoder), 4),
