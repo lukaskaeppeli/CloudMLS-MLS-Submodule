@@ -3,13 +3,14 @@
   "version": "0.0.0",
   "description": "implementation of mls for browsers",
   "main": "index.js",
+  "repository": "https://gitlab.matrix.org/matrix-org/mls-ts",
   "scripts": {
     "build": "tsc -d -p .",
     "build:browser": "browserify src/main.ts -p [ tsify --noImplicitAny ] > index.js",
     "lint": "eslint",
     "test": "jest test/"
   },
-  "author": "matrix.org",
+  "author": "The Matrix.org Foundation C.I.C.",
   "license": "Apache-2.0",
   "dependencies": {
     "elliptic": "^6.5.3"
