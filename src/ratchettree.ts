@@ -289,7 +289,7 @@ export class RatchetTreeView {
             }
             commitSecret = currPathSecret;
         } else {
-            commitSecret = new Uint8Array(); // FIXME: length
+            commitSecret = new Uint8Array(cipherSuite.hpke.kdf.extractLength);
         }
 
         return [
