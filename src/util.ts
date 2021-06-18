@@ -25,7 +25,7 @@ export function concatUint8Array(arrays: Uint8Array[]): Uint8Array {
     return ret;
 }
 
-export function eqUint8Array(a: Uint8Array, b: Uint8Array) {
+export function eqUint8Array(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length != b.length) {
         return false;
     }
@@ -39,7 +39,7 @@ export function eqUint8Array(a: Uint8Array, b: Uint8Array) {
 }
 
 // is the first array greater or equal to the second array
-export function geUint8Array(a: Uint8Array, b: Uint8Array) {
+export function geUint8Array(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length != b.length) {
         throw new Error("Length must be the same");
     }

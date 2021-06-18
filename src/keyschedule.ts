@@ -261,7 +261,7 @@ export class HashRatchet {
     constructor(
         readonly cipherSuite: CipherSuite,
         readonly nodeNum: number,
-        private secret: Uint8Array
+        private secret: Uint8Array,
     ) {
         this.generation = 0;
         this.savedKeys = {};
