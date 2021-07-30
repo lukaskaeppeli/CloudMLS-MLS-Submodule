@@ -105,7 +105,7 @@ class PathDirectionIterator {
     }
 }
 
-class NodeIterator<T> {
+class NodeIterator<T> implements Iterator<T> {
     private path: Node<T>[];
     private dirs: number[];
     constructor(private root: Node<T>) {
@@ -120,10 +120,10 @@ class NodeIterator<T> {
             this.dirs.push(-1)
         }
     }
-    next(): {done: boolean, value?: T} {
+    next(): IteratorResult<T> {
         if (this.path.length === 0) {
             // we've iterated through the whole tree
-            return {done: true}
+            return {done: true, value: undefined}
         } else if (this.dirs.length === 0) {
             // special cases where the root is a leaf node
             const node = this.path.pop();
@@ -217,7 +217,7 @@ function addNode<T>(
     }
 }
 
-export class Tree<T> {
+export class Tree<T> implements Iterable<T> {
     readonly size: number; // the number of leaf nodes
     readonly root: Node<T>;
     constructor(data: T[] | [number, Node<T>]) {
