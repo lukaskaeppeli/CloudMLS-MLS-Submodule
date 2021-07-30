@@ -163,6 +163,25 @@ class NodeIterator<T> implements Iterator<T> {
     }
 }
 
+class LeafIterator<T> implements Iterator<T> {
+    private nodeIterator: NodeIterator<T>;
+    private done: boolean;
+    constructor(root: Node<T>) {
+        this.nodeIterator = new NodeIterator<T>(root);
+    }
+    next(): IteratorResult<T> {
+        if (this.done) {
+            return {done: true, value: undefined};
+        }
+        const res = this.nodeIterator.next();
+        this.done = this.nodeIterator.next().done;
+        return res;
+    }
+    [Symbol.iterator]() {
+        return this;
+    }
+}
+
 function replaceNodePath<T>(
     node: Node<T>,
     directions: boolean[],
@@ -239,6 +258,10 @@ export class Tree<T> implements Iterable<T> {
 
     [Symbol.iterator]() {
         return new NodeIterator<T>(this.root);
+    }
+
+    leaves() {
+        return new LeafIterator<T>(this.root);
     }
 
     leaf(leafNum: number): T {
