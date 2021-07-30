@@ -280,35 +280,35 @@ describe("Ratchet Tree", () => {
             = await cipherSuite.signatureScheme.generateKeyPair();
         const credentialA = new BasicCredential(
             stringToUint8Array("@alice:example.org"),
-            cipherSuite.SignatureSchemeId,
+            cipherSuite.signatureSchemeId,
             await signingPubKeyA.serialize(),
         );
         const [signingPrivKeyB, signingPubKeyB]
             = await cipherSuite.signatureScheme.generateKeyPair();
         const credentialB = new BasicCredential(
             stringToUint8Array("@bob:example.org"),
-            cipherSuite.SignatureSchemeId,
+            cipherSuite.signatureSchemeId,
             await signingPubKeyB.serialize(),
         );
         const [signingPrivKeyC, signingPubKeyC]
             = await cipherSuite.signatureScheme.generateKeyPair();
         const credentialC = new BasicCredential(
             stringToUint8Array("@carol:example.org"),
-            cipherSuite.SignatureSchemeId,
+            cipherSuite.signatureSchemeId,
             await signingPubKeyC.serialize(),
         );
         const [signingPrivKeyD, signingPubKeyD] =
             await cipherSuite.signatureScheme.generateKeyPair();
         const credentialD = new BasicCredential(
             stringToUint8Array("@dave:example.org"),
-            cipherSuite.SignatureSchemeId,
+            cipherSuite.signatureSchemeId,
             await signingPubKeyD.serialize(),
         );
         const [signingPrivKeyE, signingPubKeyE] =
             await cipherSuite.signatureScheme.generateKeyPair();
         const credentialE = new BasicCredential(
             stringToUint8Array("@emma:example.org"),
-            cipherSuite.SignatureSchemeId,
+            cipherSuite.signatureSchemeId,
             await signingPubKeyE.serialize(),
         );
 
