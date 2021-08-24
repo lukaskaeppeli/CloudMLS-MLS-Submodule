@@ -68,16 +68,6 @@ export class Group {
         return this.ratchetTreeView.leafNum;
     }
 
-    async getGroupContext(): Promise<GroupContext> {
-        return new GroupContext(
-            this.groupId,
-            this.epoch,
-            await this.ratchetTreeView.calculateTreeHash(),
-            this.confirmedTranscriptHash,
-            [], // FIXME: extensions -- same as groupInfo.extensions minus ratchettree?
-        );
-    }
-
     /** Create a brand new group.
      */
     static async createNew(
@@ -645,7 +635,13 @@ export class Group {
     }
 
     async encrypt(data: Uint8Array, authenticatedData: Uint8Array, signingKey: SigningPrivateKey): Promise<MLSCiphertext> {
-        const context = await this.getGroupContext();
+        const context = new GroupContext(
+            this.groupId,
+            this.epoch,
+            await this.ratchetTreeView.calculateTreeHash(),
+            this.confirmedTranscriptHash,
+            [], // FIXME: extensions -- same as groupInfo.extensions minus ratchettree?
+        );
         const mlsPlaintext = await MLSPlaintext.create(
             this.cipherSuite,
             this.groupId,
