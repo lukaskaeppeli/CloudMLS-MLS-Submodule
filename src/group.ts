@@ -384,6 +384,7 @@ export class Group {
         proposals: ProposalWrapper[],
         credential: Credential,
         signingPrivateKey: SigningPrivateKey,
+        updatePathRequired: boolean = false,
     ): Promise<[MLSCiphertext, MLSPlaintext, Welcome, number[]]> {
         // unwrap the proposals
         // FIXME: allow proposal references too
@@ -412,7 +413,8 @@ export class Group {
         // non-add proposal
         // FIXME: figure out whether updating the path is advantageous even when
         // we only have adds
-        const pathRequired = bareProposals.length == 0 ||
+        updatePathRequired = updatePathRequired ||
+            bareProposals.length == 0 ||
             bareProposals.some((proposal) => { return !(proposal instanceof Add); })
 
         const nextEpoch = this.epoch + 1;
@@ -421,7 +423,7 @@ export class Group {
         let commitSecret: Uint8Array = EMPTY_BYTE_ARRAY; // FIXME: should be 0 vector of the right length
         let pathSecrets: Uint8Array[] = [];
         let ratchetTreeView2 = ratchetTreeView1;
-        if (pathRequired) {
+        if (updatePathRequired) {
             const provisionalGroupContext = new GroupContext(
                 this.groupId,
                 this.epoch, // FIXME: or nextEpoch?
