@@ -55,7 +55,6 @@ export class Group {
         readonly groupId: Uint8Array,
         public epoch: Epoch,
         readonly extensions: Extension[],
-        private hpkeKey: KEMPrivateKey,
         public confirmedTranscriptHash: Uint8Array,
         public interimTranscriptHash: Uint8Array,
         public ratchetTreeView: RatchetTreeView,
@@ -210,7 +209,6 @@ export class Group {
             groupId,
             1,
             groupExtensions,
-            hpkePrivateKey,
             confirmedTranscriptHash,
             interimTranscriptHash,
             ratchetTreeView2,
@@ -369,7 +367,6 @@ export class Group {
             groupInfo.groupId,
             groupInfo.epoch,
             [], // FIXME: extensions -- same as groupInfo.extensions minus ratchettree?
-            hpkeKey,
             groupInfo.confirmedTranscriptHash,
             interimTranscriptHash,
             ratchetTreeView,
