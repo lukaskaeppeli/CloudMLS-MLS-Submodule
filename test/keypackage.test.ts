@@ -100,4 +100,44 @@ describe("key package", () => {
             Uint8Array.from([1, 2, 3]),
         )).toEqual(Uint8Array.from([4, 5, 6]));
     });
+
+    it("should encode the Lifetime extension correctly", async () => {
+        const cipherSuite = cipherSuiteById[1]
+        const [signingPrivKey, signingPubKey] = await cipherSuite.signatureScheme.generateKeyPair();
+        const [hpkePrivKey, hpkePubKey] = await cipherSuite.hpke.kem.generateKeyPair();
+
+        let credential = new BasicCredential(
+            stringToUint8Array("TEST_ID"),
+            cipherSuite.signatureSchemeId,
+            await signingPubKey.serialize(),
+        );
+
+        // Create Lifetime for 30 Days, starting from now
+        const now = new Date().getTime()
+        const valid_until = now + (1000 * 3600 * 24 * 30)
+
+        const lifetime = new Lifetime(now, valid_until)
+
+        const keyPackage = await KeyPackage.create(
+            ProtocolVersion.Mls10,
+            cipherSuite,
+            await hpkePubKey.serialize(),
+            credential,
+            [lifetime],
+            signingPrivKey,
+        );
+
+        const enc_keyPackage = tlspl.encode([keyPackage.encoder])
+
+        const [keypackage_decoded, _] = KeyPackage.decode(enc_keyPackage, 0)
+        //console.log(keypackage_decoded)
+
+        // Expect to be a valid keypackage
+        expect(await keypackage_decoded.checkSignature()).toBe(true)
+        
+        const lifetime_decoded = keypackage_decoded.extensions[0] as Lifetime
+        expect(lifetime_decoded.not_before).toEqual(now)
+        expect(lifetime_decoded.not_after).toEqual(valid_until)
+    });
+
 });
