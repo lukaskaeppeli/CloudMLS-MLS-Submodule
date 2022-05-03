@@ -72,9 +72,7 @@ export function uint64(num: number): Encoder {
     return {
         length: 8,
         writeToBuffer(buffer: Uint8Array, offset: number): void {
-            const view: DataView = new DataView(buffer.buffer);
-            view.setUint32(offset + buffer.byteOffset, num & 0xffffffff);
-            view.setUint32(offset + 4 + buffer.byteOffset, num >> 32 & 0xffffffff);
+            (new DataView(buffer.buffer)).setBigUint64(offset, BigInt(num))
         },
     };
 }
@@ -184,12 +182,7 @@ export function decodeUint32(buffer: Uint8Array, offset: number): [number, numbe
 }
 
 export function decodeUint64(buffer: Uint8Array, offset: number): [number, number] {
-    const view: DataView = new DataView(buffer.buffer);
-    return [
-        view.getUint32(offset + buffer.byteOffset) << 32 |
-            view.getUint32(offset + 4 + buffer.byteOffset),
-        offset + 8,
-    ];
+    return [Number((new DataView(buffer.buffer)).getBigUint64(offset + buffer.byteOffset)), offset + 8]
 }
 
 export function decodeOpaque(length: number): Decoder {
