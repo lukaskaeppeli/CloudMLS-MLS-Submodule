@@ -54,6 +54,12 @@ export abstract class Extension {
                 const [extension, ] = ParentHash.decode(extensionData);
                 return [extension, offset1];
             }
+            case ExtensionType.Lifetime:
+            {
+                const [extension, ] = Lifetime.decode(extensionData);
+                return [extension, offset1];
+            }
+
             default:
                 return [new UnknownExtension(extensionType, extensionData), offset1];
         }
@@ -191,6 +197,40 @@ export class RatchetTree extends Extension {
             buffer, offset,
         );
         return [new RatchetTree(nodes), offset1];
+    }
+}
+
+export class Lifetime extends Extension {
+    constructor(readonly not_before: number, readonly not_after: number) {
+        super(ExtensionType.Lifetime)
+    }
+    get extensionData(): Uint8Array {
+        return tlspl.encode([
+            tlspl.uint64(this.not_before),
+            tlspl.uint64(this.not_after)
+        ]);
+    }
+
+    static decode(buffer: Uint8Array, offset = 0): [Lifetime, number] {
+        const [not_before, offset1] = tlspl.decodeUint64(buffer, offset)
+        const [not_after, offset2] = tlspl.decodeUint64(buffer, offset1)
+
+        return [new Lifetime(not_before, not_after), offset2]
+    }
+
+    /**
+     * Returns if the keypackage is valid at this point in time (future_time == undefined)
+     * or valid at now + future_time
+     * 
+     * @param future_time possibly undefined, time from now on in milliseconds
+     * @returns true if the keypackage is valid at specified time
+     */
+    is_valid(future_time?: number): Boolean {
+        let now_time = new Date().getTime();
+        if (future_time)
+            return (now_time > this.not_before && now_time + future_time < this.not_after)
+
+        return (now_time > this.not_before && now_time < this.not_after)
     }
 }
 
