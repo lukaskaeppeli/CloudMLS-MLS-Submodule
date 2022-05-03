@@ -26,6 +26,7 @@ import {Credential} from "./credential";
 import {SigningPrivateKey} from "./signatures";
 import {KEMPublicKey} from "./hpke/base";
 import * as tlspl from "./tlspl";
+import { base64ToBytes, bytesToBase64 } from "byte-base64";
 
 export abstract class Extension {
     constructor(readonly extensionType: ExtensionType) {}
@@ -244,8 +245,6 @@ class UnknownExtension extends Extension {
 }
 
 export class KeyPackage {
-    private hpkeKey: KEMPublicKey;
-    private hashCache: Uint8Array;
     constructor(
         readonly version: ProtocolVersion,
         readonly cipherSuite: CipherSuite,
@@ -255,6 +254,8 @@ export class KeyPackage {
         public unsignedEncoding: Uint8Array,
         public signature: Uint8Array,
         readonly signingKey?: SigningPrivateKey,
+        private hpkeKey?: KEMPublicKey,
+        private hashCache?: Uint8Array
     ) {}
 
     static async create(
@@ -278,6 +279,85 @@ export class KeyPackage {
             unsignedEncoding, signature, signingKey,
         );
     }
+
+    async toJSON() {
+        let json = {}
+
+        if (this.hpkeKey != undefined) {
+            json["hpkeKey"] = bytesToBase64(await this.hpkeKey.serialize())
+        }
+
+        if (this.hashCache != undefined) {
+            json["hashCache"] = bytesToBase64(this.hashCache)
+        }
+
+        json["version"] = this.version.valueOf()
+        json["cipherSuite"] = this.cipherSuite.id
+        json["hpkeInitKey"] = bytesToBase64(this.hpkeInitKey)
+        let credential_buffer = new Uint8Array(this.credential.encoder.length)
+        this.credential.encoder.writeToBuffer(credential_buffer, 0)
+        json["credential"] = bytesToBase64(credential_buffer)
+
+        json["extensions"] = []
+        let extension_num = 0
+        for (let extension of this.extensions) {
+            let extension_buffer = new Uint8Array(extension.encoder.length)
+            extension.encoder.writeToBuffer(extension_buffer, 0)
+            json["extensions"][extension_num] = bytesToBase64(extension_buffer)
+            extension_num++
+        }
+
+        json["usignedEncoding"] = bytesToBase64(this.unsignedEncoding)
+        json["signature"] = bytesToBase64(this.signature)
+
+        if (this.signingKey != undefined) {
+            json["signingKey"] = bytesToBase64(await this.signingKey.serialize())
+        }
+
+        return json
+    }
+
+    static async fromJSON(json: any): Promise<KeyPackage> {
+        let extensions = []
+        if (json["extensions"] != undefined) {
+            for (let extension of json["extensions"]) {
+                extensions.push(Extension.decode(base64ToBytes(extension), 0)[0])
+            }
+        }
+
+        let cipherSuite = cipherSuiteById[json["cipherSuite"]]
+
+        let signingKey = undefined
+        if (json["signingKey"] != undefined) {
+            signingKey = await cipherSuite.signatureScheme.deserializePrivate(base64ToBytes(json["signingKey"]))
+        }
+
+        let kemPublicKey = undefined
+        if (json["hpkeKey"] != undefined) {
+            kemPublicKey = await cipherSuite.hpke.kem.deserializePublic(base64ToBytes(json["hpkeKey"]))
+        }
+
+        let hashCache = undefined
+        if (json["hashCache"] != undefined) {
+            hashCache = base64ToBytes(json["hashCache"])
+        }
+
+        let keyPackage = new KeyPackage(
+            json["version"],
+            cipherSuite,
+            base64ToBytes(json["hpkeInitKey"]),
+            Credential.decode(base64ToBytes(json["credential"]), 0)[0],
+            extensions,
+            base64ToBytes(json["usignedEncoding"]),
+            base64ToBytes(json["signature"]),
+            signingKey,
+            kemPublicKey,
+            hashCache
+        )
+
+        return keyPackage
+    }
+
 
     checkSignature(): Promise<boolean> {
         return this.credential.verify(this.unsignedEncoding, this.signature);
