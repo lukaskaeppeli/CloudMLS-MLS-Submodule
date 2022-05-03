@@ -190,7 +190,7 @@ export class SecretTree {
         readonly cipherSuite: CipherSuite,
         public encryptionSecret: Uint8Array,
         readonly treeSize: number,
-        public keyTree: {[index: number]: Uint8Array}
+        public keyTree?: {[index: number]: Uint8Array}
     ) {
         if (!keyTree)
             this.keyTree = {[root(treeSize)]: encryptionSecret};
