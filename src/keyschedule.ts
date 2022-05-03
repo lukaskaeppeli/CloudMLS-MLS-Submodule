@@ -42,10 +42,11 @@ import {
     TREE,
     WELCOME,
 } from "./constants";
-import {CipherSuite} from "./ciphersuite";
+import {CipherSuite, cipherSuiteById} from "./ciphersuite";
 import * as tlspl from "./tlspl";
 import {left, right, directPath, root} from "./treemath";
 import {GroupContext} from "./group";
+import { base64ToBytes, bytesToBase64 } from "byte-base64";
 
 export async function expandWithLabel(
     cipherSuite: CipherSuite,
@@ -185,13 +186,14 @@ async function deriveTreeSecret(
 }
 
 export class SecretTree {
-    private keyTree: {[index: number]: Uint8Array};
     constructor(
         readonly cipherSuite: CipherSuite,
-        encryptionSecret: Uint8Array,
+        public encryptionSecret: Uint8Array,
         readonly treeSize: number,
+        public keyTree: {[index: number]: Uint8Array}
     ) {
-        this.keyTree = {[root(treeSize)]: encryptionSecret};
+        if (!keyTree)
+            this.keyTree = {[root(treeSize)]: encryptionSecret};
     }
     private async deriveChildSecrets(nodeNum: number): Promise<void> {
         const treeNodeSecret = this.keyTree[nodeNum];
@@ -212,7 +214,7 @@ export class SecretTree {
         this.keyTree[leftChildNum] = leftSecret;
         this.keyTree[rightChildNum] = rightSecret;
     }
-    async getRatchetsForLeaf(leafNum: number): Promise<[HashRatchet, HashRatchet]> {
+    async getRatchetsForLeaf(leafNum: number): Promise<[LenientHashRatchet, LenientHashRatchet]> {
         const nodeNum = leafNum * 2;
         const path = directPath(nodeNum, this.treeSize);
         const nodesToDerive = [];
@@ -247,8 +249,8 @@ export class SecretTree {
         leafSecret.fill(0);
 
         return [
-            new HashRatchet(this.cipherSuite, nodeNum, handshakeSecret),
-            new HashRatchet(this.cipherSuite, nodeNum, applicationSecret),
+            new LenientHashRatchet(this.cipherSuite, nodeNum, handshakeSecret),
+            new LenientHashRatchet(this.cipherSuite, nodeNum, applicationSecret),
         ];
     }
 }
@@ -257,11 +259,11 @@ export class SecretTree {
 
 export class HashRatchet {
     public generation;
-    private savedKeys: {[index: number]: [Uint8Array, Uint8Array]}
+    public savedKeys: {[index: number]: [Uint8Array, Uint8Array]}
     constructor(
         readonly cipherSuite: CipherSuite,
         readonly nodeNum: number,
-        private secret: Uint8Array,
+        public secret: Uint8Array,
     ) {
         this.generation = 0;
         this.savedKeys = {};
@@ -309,36 +311,103 @@ export class HashRatchet {
  */
 export class LenientHashRatchet extends HashRatchet {
     private origSecret: Uint8Array;
-    constructor(cipherSuite: CipherSuite, nodeNum: number, secret: Uint8Array) {
+    constructor(cipherSuite: CipherSuite, nodeNum: number, secret: Uint8Array, origSecret?: Uint8Array) {
         super(cipherSuite, nodeNum, secret);
-        this.origSecret = new Uint8Array(secret);
-    }
-    async getKey(generation: number): Promise<[Uint8Array, Uint8Array]> {
-        try {
-            return await super.getKey(generation);
-        } catch {
-            let secret = this.origSecret;
-            for (let i = 0; i < generation; i++) {
-                const newSecret = await deriveTreeSecret(
-                    this.cipherSuite, secret, SECRET,
-                    this.nodeNum, i, this.cipherSuite.hpke.kdf.extractLength,
-                );
-                if (secret !== this.origSecret) {
-                    secret.fill(0);
-                }
-                secret = newSecret;
-            }
-            const [nonce, key] = await Promise.all([
-                deriveTreeSecret(
-                    this.cipherSuite, secret, NONCE,
-                    this.nodeNum, generation, this.cipherSuite.hpke.aead.nonceLength,
-                ),
-                deriveTreeSecret(
-                    this.cipherSuite, secret, KEY,
-                    this.nodeNum, generation, this.cipherSuite.hpke.aead.keyLength,
-                ),
-            ]);
-            return [nonce, key];
+        if (origSecret) {
+            this.origSecret = origSecret
+        } else {
+            this.origSecret = secret
         }
+    }
+
+    serializeMinimal(): string {
+        let json = {}
+        json["cipherSuite"] = this.cipherSuite.id
+        json["origSecret"] = bytesToBase64(this.origSecret)
+        json["nodeNum"] = this.nodeNum
+
+        return JSON.stringify(json)
+    }
+
+    static fromSerializedMinimal(serialized: string): LenientHashRatchet {
+        let json = JSON.parse(serialized)
+
+        return new LenientHashRatchet(
+            cipherSuiteById[json["cipherSuite"]],
+            json["nodeNum"],
+            base64ToBytes(json["origSecret"]),
+            base64ToBytes(json["origSecret"])
+        )
+    }
+
+    serialize(): string {
+        let json = {}
+        json["generation"] = this.generation
+        json["cipherSuite"] = this.cipherSuite.id
+        json["secret"] = bytesToBase64(this.secret)
+        json["origSecret"] = bytesToBase64(this.origSecret)
+        json["nodeNum"] = this.nodeNum
+
+        json["savedKeys"] = {}
+        for (let key in this.savedKeys) {
+            json["savedKeys"][key][0] = bytesToBase64(this.savedKeys[key][0])
+            json["savedKeys"][key][1] = bytesToBase64(this.savedKeys[key][1])
+        }
+
+        return JSON.stringify(json)
+    }
+
+    static fromSerialized(serialized: string): LenientHashRatchet {
+        let json = JSON.parse(serialized)
+
+        let lenientHashRatchet = new LenientHashRatchet(
+            cipherSuiteById[json["cipherSuite"]],
+            json["nodeNum"],
+            base64ToBytes(json["secret"]),
+            base64ToBytes(json["origSecret"])
+        )
+
+        lenientHashRatchet.generation = json["generation"]
+
+        for (let key in json["savedKeys"]) {
+            lenientHashRatchet.savedKeys[key][0] = base64ToBytes(json["savedKeys"][key][0])
+            lenientHashRatchet.savedKeys[key][1] = base64ToBytes(json["savedKeys"][key][1])
+        }
+
+        return lenientHashRatchet
+    }
+
+    async getKey(generation: number): Promise<[Uint8Array, Uint8Array]> {
+        // TODO: This is very inefficient, if we derive the same keys over and over again,
+        //       as keys and TreeSecrets are not cached.
+        //       This happens if the messages are not stored in a local database like the 
+        //       tdlib from Telegram, but are refetched again and again. Caching the derived
+        //       keys is an option, but requires some effert as the complete MLS datastructures
+        //       are recreated from a serialized version with each request.
+        //       The only advantage of this approach is that we do not need to store every
+        //       encryption key on the keyserver, which would require much more memory.
+        let secret = this.origSecret;
+        for (let i = 0; i < generation; i++) {
+            const newSecret = await deriveTreeSecret(
+                this.cipherSuite, secret, SECRET,
+                this.nodeNum, i, this.cipherSuite.hpke.kdf.extractLength,
+            );
+            if (secret !== this.origSecret) {
+                secret.fill(0);
+            }
+            secret = newSecret;
+        }
+        const [nonce, key] = await Promise.all([
+            deriveTreeSecret(
+                this.cipherSuite, secret, NONCE,
+                this.nodeNum, generation, this.cipherSuite.hpke.aead.nonceLength,
+            ),
+            deriveTreeSecret(
+                this.cipherSuite, secret, KEY,
+                this.nodeNum, generation, this.cipherSuite.hpke.aead.keyLength,
+            ),
+        ]);
+        return [nonce, key];
+
     }
 }
