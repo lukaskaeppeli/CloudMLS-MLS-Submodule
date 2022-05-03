@@ -20,11 +20,12 @@ import {
     SecretTree,
     generateSecrets,
     generateSecretsFromJoinerSecret,
+    LenientHashRatchet,
 } from "./keyschedule";
 import {Epoch, eqEpoch, encodeEpoch, decodeEpoch} from "./epoch";
 import {NodeData, RatchetTreeView} from "./ratchettree";
 import {Extension, KeyPackage, RatchetTree} from "./keypackage";
-import {CipherSuite} from "./ciphersuite";
+import {CipherSuite, cipherSuiteById} from "./ciphersuite";
 import {KEMPrivateKey} from "./hpke/base";
 import {SigningPrivateKey} from "./signatures";
 import {Tree} from "./lbbtree";
@@ -43,12 +44,12 @@ import {Credential} from "./credential";
 import {GroupInfo, Welcome} from "./welcome";
 import * as tlspl from "./tlspl";
 import {commonAncestor, directPath} from "./treemath";
+import { base64ToBytes, bytesToBase64 } from "byte-base64";
 
 /* Manages the state of the group.
  */
 
 export class Group {
-    private hashRatchets: Record<number, [HashRatchet, HashRatchet]>;
     constructor(
         readonly version: ProtocolVersion,
         readonly cipherSuite: CipherSuite,
@@ -60,9 +61,128 @@ export class Group {
         public ratchetTreeView: RatchetTreeView,
         public secrets: Secrets,
         private secretTree: SecretTree,
+        private hashRatchets?: Record<number, [LenientHashRatchet, LenientHashRatchet]>
     ) {
-        this.hashRatchets = {};
+        if (!this.hashRatchets)
+            this.hashRatchets = {};
     }
+
+    async serialize(): Promise<string> {
+
+        let json = {}
+        json["version"] = this.version.valueOf()
+        json["ciphersuite"] = this.cipherSuite.id
+        json["group_id"] = bytesToBase64(this.groupId)
+        json["epoch"] = this.epoch
+        for (let extension of this.extensions) {
+            json["extensions"][extension.extensionType.valueOf] = bytesToBase64(extension.extensionData)
+        }
+        json["confirmedTranscriptHash"] = bytesToBase64(this.confirmedTranscriptHash)
+        json["interimTranscriptHash"] = bytesToBase64(this.interimTranscriptHash)
+        json["ratchetTreeView"] = await this.ratchetTreeView.toJSON()
+
+        json["hashRatchets"] = {}
+        Object.entries(this.hashRatchets).forEach(([key, value]) => {
+            json["hashRatchets"][key] = {}
+            json["hashRatchets"][key][0] = value[0].serialize()
+            json["hashRatchets"][key][1] = value[1].serialize()
+        });
+
+        json["secrets"] = {}
+        json["secrets"]["joinerSecret"] = bytesToBase64(this.secrets.joinerSecret)
+        json["secrets"]["memberSecret"] = bytesToBase64(this.secrets.memberSecret)
+        json["secrets"]["welcomeSecret"] = bytesToBase64(this.secrets.welcomeSecret)
+        json["secrets"]["senderDataSecret"] = bytesToBase64(this.secrets.senderDataSecret)
+        json["secrets"]["encryptionSecret"] = bytesToBase64(this.secrets.encryptionSecret)
+        json["secrets"]["exporterSecret"] = bytesToBase64(this.secrets.exporterSecret)
+        json["secrets"]["authenticationSecret"] = bytesToBase64(this.secrets.authenticationSecret)
+        json["secrets"]["externalSecret"] = bytesToBase64(this.secrets.externalSecret)
+        json["secrets"]["confirmationKey"] = bytesToBase64(this.secrets.confirmationKey)
+        json["secrets"]["membershipKey"] = bytesToBase64(this.secrets.membershipKey)
+        json["secrets"]["resumptionSecret"] = bytesToBase64(this.secrets.resumptionSecret)
+        json["secrets"]["initSecret"] = bytesToBase64(this.secrets.initSecret)
+
+        json["secretTree"] = {}
+        json["secretTree"]["keyTree"] = {}
+        for (let index in this.secretTree.keyTree) {
+            json["secretTree"]["keyTree"][index] = bytesToBase64(this.secretTree.keyTree[index])
+        }
+
+        json["secretTree"]["cipherSuite"] = this.secretTree.cipherSuite.id
+        json["secretTree"]["encryptionSecret"] = bytesToBase64(this.secretTree.encryptionSecret)
+        json["secretTree"]["treeSize"] = this.secretTree.treeSize
+
+        return JSON.stringify(json)
+    }
+
+    static async fromSerialized(serialized_group: string) {
+        let json = JSON.parse(serialized_group)
+
+        let keyTree = {}
+        for (let keyTreeNode in json["secretTree"]["keyTree"]) {
+            keyTree[keyTreeNode] = (base64ToBytes(json["secretTree"]["keyTree"][keyTreeNode]))
+        }
+
+        let secretTree: SecretTree = new SecretTree(
+            cipherSuiteById[json["secretTree"]["cipherSuite"]],
+            base64ToBytes(json["secretTree"]["encryptionSecret"]),
+            json["secretTree"]["treeSize"],
+            keyTree
+        )
+
+        let secrets: Secrets = {
+            joinerSecret: base64ToBytes(json["secrets"]["joinerSecret"]),
+            memberSecret: base64ToBytes(json["secrets"]["memberSecret"]),
+            welcomeSecret: base64ToBytes(json["secrets"]["welcomeSecret"]),
+            senderDataSecret: base64ToBytes(json["secrets"]["senderDataSecret"]),
+            encryptionSecret: base64ToBytes(json["secrets"]["encryptionSecret"]),
+            exporterSecret: base64ToBytes(json["secrets"]["exporterSecret"]),
+            authenticationSecret: base64ToBytes(json["secrets"]["authenticationSecret"]),
+            externalSecret: base64ToBytes(json["secrets"]["externalSecret"]),
+            confirmationKey: base64ToBytes(json["secrets"]["confirmationKey"]),
+            membershipKey: base64ToBytes(json["secrets"]["membershipKey"]),
+            resumptionSecret: base64ToBytes(json["secrets"]["resumptionSecret"]),
+            initSecret: base64ToBytes(json["secrets"]["initSecret"])
+        }
+
+
+        let hashRatchets: Record<number, [LenientHashRatchet, LenientHashRatchet]> = {}
+        for (let leafNum in json["hashRatchets"]) {
+            hashRatchets[leafNum] = [
+                LenientHashRatchet.fromSerialized(json["hashRatchets"][leafNum][0]),
+                LenientHashRatchet.fromSerialized(json["hashRatchets"][leafNum][1])
+            ]
+        }
+
+        let extensions = []
+        if (json["extensions"] != undefined) {
+            for (let extension of json["extensions"]) {
+                extensions.push(Extension.decode(base64ToBytes(extension), 0)[0])
+            }
+        }
+
+        let ratchetTreeView = await RatchetTreeView.fromJSON(json["ratchetTreeView"])
+
+        return new Group(
+            json["version"],
+            cipherSuiteById[json["ciphersuite"]],
+            base64ToBytes(json["group_id"]),
+            json["epoch"],
+            extensions,
+            base64ToBytes(json["confirmedTranscriptHash"]),
+            base64ToBytes(json["interimTranscriptHash"]),
+            ratchetTreeView,
+            secrets,
+            secretTree,
+            hashRatchets
+        )
+
+    }
+
+    get getHashRatchets() {
+        return this.hashRatchets
+    }
+
 
     get leafNum(): number {
         return this.ratchetTreeView.leafNum;
@@ -675,10 +795,24 @@ export class Group {
         );
     }
 
-    async decrypt(mlsCiphertext: MLSCiphertext): Promise<MLSPlaintext> {
+    async decrypt(
+        mlsCiphertext: MLSCiphertext,
+        getBaseRatchets?: (number) => Promise<LenientHashRatchet> | LenientHashRatchet,
+        senderDataSecret?: Uint8Array
+    ): Promise<MLSPlaintext> {
+
         if (!eqUint8Array(this.groupId, mlsCiphertext.groupId)) {
             throw new Error("Encrypted for the wrong group.");
         }
+
+        if (getBaseRatchets != undefined) {
+            return await mlsCiphertext.decrypt(
+                this.cipherSuite,
+                getBaseRatchets,
+                senderDataSecret
+            )
+        }
+
         if (!eqEpoch(this.epoch, mlsCiphertext.epoch)) {
             throw new Error("Wrong epoch.");
         }
