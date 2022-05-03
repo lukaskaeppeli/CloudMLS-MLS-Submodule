@@ -20,7 +20,7 @@ import {Leaf, Internal, Node, Tree} from "./lbbtree";
 import * as treemath from "./treemath";
 import {ParentHash, ParentNode, RatchetTree, KeyPackage} from "./keypackage";
 import {KEMPrivateKey, KEMPublicKey} from "./hpke/base";
-import {CipherSuite} from "./ciphersuite";
+import {CipherSuite, cipherSuiteById} from "./ciphersuite";
 import {deriveSecret} from "./keyschedule";
 import {Credential} from "./credential";
 import {
@@ -34,6 +34,7 @@ import {
 } from "./message";
 import {GroupContext} from "./group";
 import * as tlspl from "./tlspl";
+import { base64ToBytes, bytesToBase64 } from "byte-base64";
 
 /** The ratchet tree allows group members to efficiently update the group secrets.
  */
@@ -138,6 +139,148 @@ export class RatchetTreeView {
                 .map(v => v[1]);
         this.nodeHashes = nodeHashes || {};
     }
+
+    async toJSON(): Promise<any> {
+        let json = {}
+
+        json["cipherSuite"] = this.cipherSuite.id
+        json["leafNum"] = this.leafNum
+
+        json["idToLeafNum"] = {}
+        this.idToLeafNum.forEach((val: number, key: string) => json["idToLeafNum"][val] = key)
+
+        json["keyPackages"] = {}
+        let keypackage_index = 0
+        for (let keypackage of this.keyPackages) {
+            if (keypackage != undefined) {
+                json["keyPackages"][keypackage_index] = await keypackage.toJSON()
+            } else {
+                json["keyPackages"][keypackage_index] = "undefined"
+            }
+            keypackage_index++
+        }
+
+        json["emptyLeaves"] = this.emptyLeaves
+
+        json["nodeHashes"] = {}
+        Object.entries(this.nodeHashes).forEach(([key, value]) => json["nodeHashes"][key] = bytesToBase64(value));
+
+        json["tree"] = {}
+        let i = 0
+        for (let node of this.tree) {
+
+            json["tree"][i] = {}
+
+            if (node.credential != undefined) {
+                // Credential
+                let credential_buffer = new Uint8Array(node.credential.encoder.length)
+                node.credential.encoder.writeToBuffer(credential_buffer, 0)
+
+                json["tree"][i]["credential"] = bytesToBase64(credential_buffer)
+            }
+
+            if (node.leafNum != undefined) {
+                json["tree"][i]["leafNum"] = node.leafNum
+            }
+            if (node.parentHash != undefined) {
+                json["tree"][i]["parentHash"] = bytesToBase64(node.parentHash)
+            }
+
+            if (node.privateKey != undefined) {
+                json["tree"][i]["privateKey"] = bytesToBase64(await node.privateKey.serialize())
+            }
+            if (node.publicKey != undefined) {
+                json["tree"][i]["publicKey"] = bytesToBase64(await node.publicKey.serialize())
+
+            }
+
+            let j = 0
+            json["tree"][i]["unmergedLeaves"] = {}
+            for (let unmergedLeaf of node.unmergedLeaves) {
+                json["tree"][i]["unmergedLeaves"][j] = unmergedLeaf
+                j++
+            }
+
+            i++
+        }
+
+        return json
+    }
+
+
+    static async fromJSON(json: any): Promise<RatchetTreeView> {
+        let cipherSuite = cipherSuiteById[json["cipherSuite"]]
+
+        let tree_data = []
+        for (let node in json["tree"]) {
+
+            let unmergedLeaves: number[] = []
+            for (let unmergedLeaf in json["tree"][node]["unmergedLeaves"]) {
+                unmergedLeaves.push(json["tree"][node]["unmergedLeaves"][unmergedLeaf])
+            }
+
+            let credential = undefined
+            if (json["tree"][node]["credential"] != undefined) {
+                credential = Credential.decode(base64ToBytes(json["tree"][node]["credential"]), 0)[0]
+            }
+
+            let privateKey = undefined
+            if (json["tree"][node]["privateKey"] != undefined)
+                privateKey = await cipherSuite.hpke.kem.deserializePrivate(base64ToBytes(json["tree"][node]["privateKey"]))
+
+            let publicKey = undefined
+            if (json["tree"][node]["publicKey"] != undefined)
+                publicKey = await cipherSuite.hpke.kem.deserializePublic(base64ToBytes(json["tree"][node]["publicKey"]))
+
+            let parentHash = new Uint8Array()
+            if (json["tree"][node]["parentHash"] != undefined) {
+                parentHash = base64ToBytes(json["tree"][node]["parentHash"])
+            }
+
+            let nodeData = new NodeData(
+                privateKey,
+                publicKey,
+                unmergedLeaves,
+                credential,
+                parentHash,
+                json["tree"][node]["leafNum"]
+            )
+
+            tree_data.push(nodeData)
+        }
+        let tree = new Tree<NodeData>(tree_data)
+
+        let keypackages = []
+        for (let keypackage in json["keyPackages"]) {
+            if (json["keyPackages"][keypackage] != "undefined") {
+                keypackages.push(await KeyPackage.fromJSON(json["keyPackages"][keypackage]))
+            } else {
+                keypackages.push(undefined)
+            }
+        }
+
+        let mapEntries = []
+        for (let entry in json["idToLeafNum"]) {
+            mapEntries.push([json["idToLeafNum"][entry], +entry])
+        }
+        let map = new Map<string, number>(mapEntries)
+
+        let nodeHashes: Record<number, Uint8Array> = {}
+        for (let node in json["nodeHashes"]) {
+            nodeHashes[node] = base64ToBytes(json["nodeHashes"][node])
+        }
+
+        return new RatchetTreeView(
+            cipherSuite,
+            json["leafNum"],
+            tree,
+            keypackages,
+            map,
+            json["emptyLeaves"],
+            nodeHashes
+        )
+    }
+
 
     async toRatchetTreeExtension(): Promise<RatchetTree> {
         const nodes: Array<KeyPackage | ParentNode | undefined> =
