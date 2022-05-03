@@ -24,7 +24,7 @@ import {EMPTY_BYTE_ARRAY, NONCE, KEY, ContentType, SenderType, ProposalType, Pro
 import {KeyPackage} from "./keypackage";
 import {SigningPublicKey, SigningPrivateKey} from "./signatures";
 import {CipherSuite} from "./ciphersuite";
-import {expandWithLabel, HashRatchet} from "./keyschedule";
+import {expandWithLabel, HashRatchet, LenientHashRatchet} from "./keyschedule";
 import {GroupContext} from "./group";
 import * as tlspl from "./tlspl";
 
@@ -459,7 +459,7 @@ export class MLSCiphertext {
     }
     async decrypt(
         cipherSuite: CipherSuite,
-        getContentRatchet: (number) => Promise<HashRatchet> | HashRatchet,
+        getContentRatchet: (number) => Promise<LenientHashRatchet> | LenientHashRatchet,
         senderDataSecret: Uint8Array,
     ): Promise<MLSPlaintext> {
         const hpke = cipherSuite.hpke;
@@ -506,8 +506,8 @@ export class MLSCiphertext {
         const mlsCiphertextContent = await hpke.aead.open(
             contentKey, contentNonce, mlsCiphertextContentAad, this.ciphertext,
         );
-        contentKey.fill(0);
-        contentNonce.fill(0);
+        // contentKey.fill(0);
+        // contentNonce.fill(0);
         const contentDecode = MLSPlaintext.getContentDecode(this.contentType);
         // eslint-disable-next-line comma-dangle, array-bracket-spacing
         const [[content, signature, confirmationTag, ], ] = tlspl.decode(
