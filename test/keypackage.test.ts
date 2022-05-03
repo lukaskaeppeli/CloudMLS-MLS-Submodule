@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import {mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
+import {cipherSuiteById, mls10_128_DhKemX25519Aes128GcmSha256Ed25519 as cipherSuite} from "../src/ciphersuite";
 import {BasicCredential} from "../src/credential";
-import {KeyPackage, ParentHash} from "../src/keypackage";
+import {KeyPackage, Lifetime, ParentHash} from "../src/keypackage";
 import {HPKECiphertext} from "../src/message";
 import {EMPTY_BYTE_ARRAY, SignatureScheme, ProtocolVersion} from "../src/constants";
 import {stringToUint8Array} from "../src/util";
