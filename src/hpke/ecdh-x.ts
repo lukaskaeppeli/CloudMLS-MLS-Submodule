@@ -102,7 +102,6 @@ function makeDH(
 
         async deserializePrivate(enc: Uint8Array): Promise<[DHPrivateKey, DHPublicKey]> {
             const k = new Uint8Array(enc);
-            clamp(k);
             k.reverse();
             const keyPair = ec.keyFromPrivate(k);
             return [new PrivateKey(keyPair), new PublicKey(keyPair.getPublic())];
