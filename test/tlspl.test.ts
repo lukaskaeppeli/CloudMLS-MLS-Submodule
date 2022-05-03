@@ -72,4 +72,14 @@ describe("TLS presentation language", () => {
             ]),
         )).toEqual([[[Uint8Array.from([1]), Uint8Array.from([2, 3]), Uint8Array.from([4, 5, 6])]], 10]);
     });
+
+    it("should encode and decode 64 bit ints", () => {
+        const large_number = 1644235681557
+
+        let uint64Encoded = tlspl.encode([tlspl.uint64(large_number)])
+        let [decoded, _] = tlspl.decodeUint64(uint64Encoded, 0)
+
+        expect(decoded).toEqual(large_number)
+    })
+
 });
