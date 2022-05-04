@@ -19,10 +19,8 @@ try to produce an implementation of MLS that can be used for testing ideas
 around MLS.  For example, secrets may not be properly purged from memory when
 they should be, and no effort was made in auditing the libraries that this
 depends on.
-
 This project might turn into a secure implementation in the future, but it
 should not be relied on for security at the present time.
-
 In addition, this implementation does not attempt to be efficient in any way,
 with respect to both time and memory usage.
 "
