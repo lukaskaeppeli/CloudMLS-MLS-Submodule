@@ -3,14 +3,14 @@
   "version": "0.0.0",
   "description": "implementation of mls for browsers",
   "main": "index.js",
-  "repository": "https://gitlab.matrix.org/matrix-org/mls-ts",
+  "repository": "https://github.com/lukaskaeppeli/CloudMLS-MLS-Submodule",
   "scripts": {
     "build": "tsc -d -p .",
     "build:browser": "browserify src/main.ts -p [ tsify --noImplicitAny ] > index.js",
     "lint": "eslint",
     "test": "jest test/"
   },
-  "author": "The Matrix.org Foundation C.I.C.",
+  "author": "Lukas Käppeli",
   "license": "Apache-2.0",
   "dependencies": {
     "@types/jest": "^26.0.24",
