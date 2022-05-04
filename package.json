@@ -1,7 +1,7 @@
 {
   "name": "mls",
-  "version": "0.0.0",
-  "description": "implementation of mls for browsers",
+  "version": "0.1.0",
+  "description": "implementation of mls for browsers allowing object serialization",
   "main": "index.js",
   "repository": "https://github.com/lukaskaeppeli/CloudMLS-MLS-Submodule",
   "scripts": {
